@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SENPAI - Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --bg-primary: #0a0a1a;
+      --bg-card: #161633;
+      --border-color: rgba(255, 255, 255, 0.06);
+      --accent-red: #e74c3c;
+      --text-primary: #ffffff;
+      --text-secondary: #8892b0;
+      --font-family: 'Inter', sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-family);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .login-container {
+      background: var(--bg-card);
+      padding: 40px;
+      border-radius: 16px;
+      border: 1px solid var(--border-color);
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      text-align: center;
+    }
+    .login-icon {
+      font-size: 48px;
+      color: var(--accent-red);
+      margin-bottom: 20px;
+    }
+    .brand-name {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--accent-red);
+      letter-spacing: 2px;
+    }
+    .brand-sub {
+      display: block;
+      font-size: 12px;
+      color: var(--text-secondary);
+      letter-spacing: 3px;
+      margin-bottom: 30px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      box-sizing: border-box;
+      outline: none;
+      transition: border 0.3s;
+    }
+    .form-input:focus {
+      border-color: var(--accent-red);
+    }
+    .btn-login {
+      width: 100%;
+      padding: 14px;
+      background: var(--accent-red);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .btn-login:hover {
+      background: #c0392b;
+    }
+    .error-msg {
+      color: #e74c3c;
+      font-size: 13px;
+      margin-bottom: 15px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-icon"><i class="fas fa-lock"></i></div>
+    <div class="brand-name">SENPAI</div>
+    <div class="brand-sub">RESTRICTED ACCESS</div>
+    
+    <div class="error-msg" id="error-msg">Incorrect password. Access denied.</div>
+    
+    <div class="form-group">
+      <label class="form-label">Admin Password</label>
+      <input type="password" id="password" class="form-input" placeholder="Enter password to access panel..." onkeypress="if(event.key === 'Enter') login()">
+    </div>
+    
+    <button class="btn-login" onclick="login()">Authenticate</button>
+  </div>
+
+  <script>
+    async function login() {
+      const password = document.getElementById('password').value;
+      const errorMsg = document.getElementById('error-msg');
+      
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      
+      const data = await res.json();
+      if(data.success) {
+        window.location.href = '/';
+      } else {
+        errorMsg.style.display = 'block';
+        document.getElementById('password').value = '';
+      }
+    }
+  </script>
+</body>
+</html>

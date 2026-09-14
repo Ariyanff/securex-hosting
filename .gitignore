@@ -1,0 +1,6 @@
+node_modules/
+data/uploads/
+data/bots.json
+.env
+*.log
+.DS_Store

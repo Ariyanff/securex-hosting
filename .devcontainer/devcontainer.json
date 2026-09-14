@@ -1,0 +1,23 @@
+{
+  "name": "SENPAI Bot Hosting",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11",
+      "installTools": true
+    },
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    }
+  },
+  "postCreateCommand": "npm install && pip install --break-system-packages discord.py requests pycryptodome python-dotenv protobuf urllib3",
+  "postStartCommand": "nohup node server.js > /tmp/senpai.log 2>&1 &",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "SENPAI Panel",
+      "visibility": "public",
+      "onAutoForward": "openBrowser"
+    }
+  }
+}

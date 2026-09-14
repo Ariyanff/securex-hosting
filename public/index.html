@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SENPAI - Premium Discord Bot Hosting Panel. Upload, manage, and monitor your bots with ease.">
+  <meta name="theme-color" content="#e74c3c">
+  <title>SENPAI - Bot Hosting Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <i class="fas fa-robot"></i>
+      <div>
+        <span class="brand-name">SENPAI</span>
+        <span class="brand-sub">BOT HOSTING</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <span class="nav-section-label">MAIN</span>
+        <a href="#" class="nav-item active" data-page="dashboard">
+          <i class="fas fa-house"></i><span>Dashboard</span>
+        </a>
+        <a href="#" class="nav-item" data-page="upload">
+          <i class="fas fa-cloud-arrow-up"></i><span>Upload Bot</span>
+        </a>
+        <a href="#" class="nav-item" data-page="files">
+          <i class="fas fa-folder-open"></i><span>My Files</span>
+        </a>
+      </div>
+      <div class="nav-section">
+        <span class="nav-section-label">ADMINISTRATION</span>
+        <a href="#" class="nav-item" data-page="admin">
+          <i class="fas fa-shield-halved"></i><span>Admin Panel</span>
+        </a>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar"><i class="fas fa-user"></i></div>
+        <div>
+          <span class="user-name">Admin</span>
+          <span class="user-role">Owner</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+    <header class="header">
+      <div class="header-left">
+        <button class="hamburger" id="hamburger-btn" aria-label="Toggle sidebar">
+          <i class="fas fa-bars"></i>
+        </button>
+        <div class="header-title">
+          <span class="page-label">Dashboard</span>
+          <span class="page-name">Overview</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-ghost" id="btn-admin-access">
+          <i class="fas fa-shield-halved"></i><span>Admin Access</span>
+        </button>
+        <button class="btn btn-primary" id="new-bot-btn">
+          <i class="fas fa-plus"></i><span>New Bot</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- PAGE: DASHBOARD -->
+      <section id="page-dashboard" class="page">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon red"><i class="fas fa-robot"></i></div>
+            <div class="stat-value" id="stat-total">0</div>
+            <div class="stat-label">Total Bots</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green"><i class="fas fa-play"></i></div>
+            <div class="stat-value" id="stat-running">0</div>
+            <div class="stat-label">Running</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
+            <div class="stat-value" id="stat-pending">0</div>
+            <div class="stat-label">Pending</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon red"><i class="fas fa-stop"></i></div>
+            <div class="stat-value" id="stat-stopped">0</div>
+            <div class="stat-label">Stopped</div>
+          </div>
+        </div>
+        <div class="bot-grid" id="bots-container">
+          <!-- JS populates bot cards here -->
+        </div>
+      </section>
+
+      <!-- PAGE: UPLOAD BOT -->
+      <section id="page-upload" class="page" style="display:none;">
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">☁️ Upload Your Bot</h2></div>
+          <div class="card-body">
+            <div class="dropzone" id="dropzone">
+              <div class="dropzone-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+              <p class="dropzone-title">Drop your bot file here</p>
+              <p class="dropzone-subtitle">or click to browse</p>
+              <div class="file-types">
+                <span class="file-type-badge py">PY</span>
+                <span class="file-type-badge zip">ZIP</span>
+              </div>
+              <input type="file" id="file-input" accept=".py,.zip" hidden>
+            </div>
+            <div id="selected-file-name"></div>
+            <button class="upload-btn" id="upload-btn">
+              <i class="fas fa-cloud-arrow-up"></i> Upload Bot
+            </button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">ℹ️ Upload Guidelines</h2></div>
+          <div class="card-body">
+            <div class="guidelines-grid">
+              <div class="guideline-item">
+                <div class="guideline-icon guideline-icon--red"><i class="fas fa-file-code"></i></div>
+                <div>
+                  <h4 class="guideline-title">Single Python File</h4>
+                  <p class="guideline-desc">Upload a single .py file. It will be executed directly as the entry point.</p>
+                </div>
+              </div>
+              <div class="guideline-item">
+                <div class="guideline-icon guideline-icon--amber"><i class="fas fa-file-zipper"></i></div>
+                <div>
+                  <h4 class="guideline-title">ZIP Archive</h4>
+                  <p class="guideline-desc">Upload a .zip containing multiple files. Auto-detects main.py, bot.py, app.py, etc.</p>
+                </div>
+              </div>
+              <div class="guideline-item">
+                <div class="guideline-icon guideline-icon--green"><i class="fas fa-wand-magic-sparkles"></i></div>
+                <div>
+                  <h4 class="guideline-title">Auto Dependencies</h4>
+                  <p class="guideline-desc">Include requirements.txt for automatic package installation.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAGE: MY FILES -->
+      <section id="page-files" class="page" style="display:none;">
+        <div class="files-page-header">
+          <h2 class="section-title">My Files</h2>
+          <div class="files-header-badges">
+            <span class="meta-badge"><i class="fas fa-hard-drive"></i> <span id="total-size">0 B</span> total</span>
+            <span class="meta-badge"><i class="fas fa-file"></i> <span id="total-files">0</span> files</span>
+          </div>
+        </div>
+        <div id="files-container">
+          <!-- JS populates file groups here -->
+        </div>
+      </section>
+
+      <!-- PAGE: BOT LOGS -->
+      <section id="page-logs" class="page" style="display:none;">
+        <div class="logs-header">
+          <div class="logs-header-left">
+            <button class="btn btn-ghost" id="logs-back-btn">
+              <i class="fas fa-arrow-left"></i><span>Back</span>
+            </button>
+          </div>
+          <div class="logs-header-right">
+            <button class="btn btn-ghost" id="logs-download-btn">
+              <i class="fas fa-download"></i><span>Download</span>
+            </button>
+          </div>
+        </div>
+        <div class="logs-bot-info">
+          <div class="logs-bot-details">
+            <i class="fas fa-robot"></i>
+            <span class="logs-bot-name" id="logs-bot-name">—</span>
+            <span class="logs-bot-id" id="logs-bot-id">—</span>
+            <span class="status-badge status-stopped" id="logs-bot-status">
+              <span class="status-dot"></span> STOPPED
+            </span>
+          </div>
+          <div class="logs-controls">
+            <button class="btn btn-icon" id="btn-logs-refresh" title="Refresh">
+              <i class="fas fa-rotate-right"></i>
+            </button>
+          </div>
+        </div>
+        <div class="terminal terminal-fullheight" id="logs-terminal">
+          <!-- JS populates log lines here -->
+        </div>
+      </section>
+
+      <!-- PAGE: ADMIN PANEL -->
+      <section id="page-admin" class="page" style="display:none;">
+        <div class="admin-layout">
+          <div class="card">
+            <div class="card-header"><h2 class="card-title"><i class="fas fa-server"></i> System Information</h2></div>
+            <div class="card-body">
+              <div class="admin-info-grid">
+                  <div class="admin-info-item">
+                    <span class="admin-info-label">Platform</span>
+                    <span class="admin-info-value" id="sys-platform">Windows x64</span>
+                  </div>
+                  <div class="admin-info-item">
+                    <span class="admin-info-label">Node Version</span>
+                    <span class="admin-info-value" id="sys-node-version">v20.11.0</span>
+                  </div>
+                  <div class="admin-info-item">
+                    <span class="admin-info-label">Python Version</span>
+                    <span class="admin-info-value" id="sys-python-version">3.12.1</span>
+                  </div>
+                <div class="admin-info-item">
+                  <span class="admin-info-label">Uptime</span>
+                  <span class="admin-info-value" id="admin-uptime">—</span>
+                </div>
+                  <div class="admin-info-item">
+                    <span class="admin-info-label">CPU Usage</span>
+                    <div class="progress-bar-container">
+                      <div class="progress-bar progress-bar--green" id="sys-cpu-bar" style="width:23%"></div>
+                    </div>
+                    <span class="admin-info-value" id="sys-cpu-text">23%</span>
+                  </div>
+                  <div class="admin-info-item">
+                    <span class="admin-info-label">Memory Usage</span>
+                    <div class="progress-bar-container">
+                      <div class="progress-bar progress-bar--amber" id="sys-mem-bar" style="width:61%"></div>
+                    </div>
+                    <span class="admin-info-value" id="sys-mem-text">61% (1.2 GB / 2 GB)</span>
+                  </div>
+                  <div class="admin-info-item">
+                    <span class="admin-info-label">Disk Usage</span>
+                    <div class="progress-bar-container">
+                      <div class="progress-bar progress-bar--red" id="sys-disk-bar" style="width:74%"></div>
+                    </div>
+                    <span class="admin-info-value" id="sys-disk-text">74% (14.8 GB / 20 GB)</span>
+                  </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h2 class="card-title"><i class="fas fa-bolt"></i> Quick Actions</h2></div>
+            <div class="card-body">
+              <div class="admin-actions-grid">
+                <button class="btn-admin-action" id="btn-admin-stop-all"><i class="fas fa-stop"></i> Stop All Bots</button>
+                <button class="btn-admin-action" id="btn-admin-restart-all"><i class="fas fa-rotate-right"></i> Restart All</button>
+                <button class="btn-admin-action btn-admin-action--danger" id="btn-admin-purge-logs"><i class="fas fa-trash"></i> Purge Logs</button>
+                <button class="btn-admin-action" id="btn-admin-clear-cache"><i class="fas fa-broom"></i> Clear Cache</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h2 class="card-title"><i class="fas fa-gear"></i> Settings</h2></div>
+            <div class="card-body">
+              <div class="settings-list">
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <span class="settings-item-label">Max Bots Per User</span>
+                    <span class="settings-item-desc">Maximum number of bots a single user can host</span>
+                  </div>
+                  <input type="number" class="settings-input" id="setting-max-bots" value="5" min="1" max="50">
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <span class="settings-item-label">Auto-Restart on Crash</span>
+                    <span class="settings-item-desc">Automatically restart bots that crash unexpectedly</span>
+                  </div>
+                  <div class="toggle-switch">
+                    <input type="checkbox" id="setting-auto-restart" class="toggle-input" checked>
+                    <span class="toggle-slider"></span>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <span class="settings-item-label">Security Scan on Upload</span>
+                    <span class="settings-item-desc">Scan uploaded files for malicious code before running</span>
+                  </div>
+                  <div class="toggle-switch">
+                    <input type="checkbox" id="setting-security-scan" class="toggle-input" checked>
+                    <span class="toggle-slider"></span>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <span class="settings-item-label">Max Upload Size (MB)</span>
+                    <span class="settings-item-desc">Maximum file upload size allowed</span>
+                  </div>
+                  <input type="number" class="settings-input" id="setting-max-upload" value="25" min="1" max="100">
+                </div>
+              </div>
+              <button class="btn btn-primary" id="btn-save-settings" style="margin-top:1.5rem;">
+                <i class="fas fa-save"></i> Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- MODAL: Confirmation -->
+  <div class="modal-backdrop hidden" id="confirm-modal">
+    <div class="modal">
+      <div class="modal-icon danger"><i class="fas fa-triangle-exclamation"></i></div>
+      <div class="modal-title">Delete Bot</div>
+      <div class="modal-message" id="confirm-message">Are you sure you want to delete this bot?</div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="confirm-no">Cancel</button>
+        <button class="btn btn-danger" id="confirm-yes"><i class="fas fa-trash"></i> Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
