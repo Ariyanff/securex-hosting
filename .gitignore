@@ -4,3 +4,4 @@ data/bots.json
 .env
 *.log
 .DS_Store
+cloudflared.exe

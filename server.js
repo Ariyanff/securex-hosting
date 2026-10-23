@@ -834,7 +834,7 @@ app.post('/api/bots/:id/start', async (req, res) => {
     try {
         const bot = findBot(req.params.id);
         if (!bot) return res.status(404).json({ error: 'Bot not found' });
-        if (bot.status === 'running') return res.status(400).json({ error: 'Bot is already running' });
+        if (bot.status === 'running' && processes.has(bot.id)) return res.status(400).json({ error: 'Bot is already running' });
 
         // Start asynchronously — respond immediately
         res.json({ success: true, message: 'Bot is starting ...' });
@@ -854,7 +854,7 @@ app.post('/api/bots/:id/stop', async (req, res) => {
     try {
         const bot = findBot(req.params.id);
         if (!bot) return res.status(404).json({ error: 'Bot not found' });
-        if (bot.status === 'stopped') return res.status(400).json({ error: 'Bot is already stopped' });
+        if (bot.status === 'stopped' && !processes.has(bot.id)) return res.status(400).json({ error: 'Bot is already stopped' });
 
         await stopBot(bot);
         res.json({ success: true, message: 'Bot stopped' });
@@ -1196,6 +1196,14 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`  ║  📦  Bots loaded: ${String(bots.length).padEnd(27)}║`);
     console.log('  ╚═══════════════════════════════════════════════╝');
     console.log('');
+
+    // Auto-resume bots that were running before server reboot
+    for (const b of bots) {
+        if (b.status === 'running') {
+            console.log(`[SecureX] Auto-resuming bot: ${b.name} (${b.id})`);
+            startBot(b).catch(err => console.error(`[SecureX] Auto-resume error for ${b.name}:`, err.message));
+        }
+    }
 });
 
 module.exports = { app, server };
