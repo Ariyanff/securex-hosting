@@ -2,6 +2,7 @@ services:
   - type: web
     name: securex-hosting
     runtime: docker
+    region: singapore
     plan: free
     dockerfilePath: ./Dockerfile
     envVars:
