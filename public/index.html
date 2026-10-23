@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="SENPAI - Premium Discord Bot Hosting Panel. Upload, manage, and monitor your bots with ease.">
-  <meta name="theme-color" content="#e74c3c">
-  <title>SENPAI - Bot Hosting Panel</title>
+  <meta name="description" content="SecureX Hosting - Premium Discord Bot Hosting Panel. Upload, manage, edit, and monitor your bots with ease.">
+  <meta name="theme-color" content="#8b5cf6">
+  <title>SecureX Hosting - Discord Bot Panel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
         integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
         crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -19,10 +19,10 @@
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-      <i class="fas fa-robot"></i>
+      <div class="brand-logo-icon"><i class="fas fa-shield-halved"></i></div>
       <div>
-        <span class="brand-name">SENPAI</span>
-        <span class="brand-sub">BOT HOSTING</span>
+        <span class="brand-name">SecureX</span>
+        <span class="brand-sub">HOSTING PANEL</span>
       </div>
     </div>
 
@@ -331,6 +331,86 @@
       <div class="modal-actions">
         <button class="btn btn-outline" id="confirm-no">Cancel</button>
         <button class="btn btn-danger" id="confirm-yes"><i class="fas fa-trash"></i> Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: In-Browser Code & File Editor with Save & Deploy -->
+  <div class="editor-backdrop hidden" id="editor-modal">
+    <div class="editor-window">
+      <div class="editor-header">
+        <div class="editor-title-group">
+          <div class="editor-badge"><i class="fas fa-code"></i></div>
+          <div class="editor-title-texts">
+            <div class="editor-bot-name-wrapper">
+              <span class="editor-bot-name" id="editor-bot-name">Bot Editor</span>
+              <span class="editor-bot-status-pill" id="editor-bot-status-pill">RUNNING</span>
+            </div>
+            <div class="editor-file-path" id="editor-current-path">Select a file</div>
+          </div>
+          <span class="editor-dirty-indicator hidden" id="editor-dirty"><i class="fas fa-circle"></i> Unsaved</span>
+        </div>
+        <div class="editor-header-actions">
+          <button class="btn btn-sm btn-ghost" id="editor-new-file-btn" title="Create New File">
+            <i class="fas fa-plus"></i> <span>New File</span>
+          </button>
+          <button class="btn btn-sm btn-outline-cyan" id="editor-save-btn" title="Save File (Ctrl+S)">
+            <i class="fas fa-floppy-disk"></i> <span>Save</span>
+          </button>
+          <button class="btn btn-sm btn-glow-deploy" id="editor-deploy-btn" title="Save and Immediately Restart/Deploy Bot (Ctrl+Enter)">
+            <i class="fas fa-rocket"></i> <span>Save & Deploy</span>
+          </button>
+          <button class="btn btn-sm btn-icon btn-ghost" id="editor-close-btn" title="Close Editor">
+            <i class="fas fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="editor-body">
+        <!-- File Tree Sidebar -->
+        <aside class="editor-sidebar">
+          <div class="editor-sidebar-header">
+            <span><i class="fas fa-folder-tree"></i> FILES</span>
+            <button class="btn-icon-xs" id="editor-refresh-files" title="Refresh files list"><i class="fas fa-rotate-right"></i></button>
+          </div>
+          <div class="editor-file-list" id="editor-file-list">
+            <div class="editor-loading-files"><i class="fas fa-spinner fa-spin"></i> Loading files...</div>
+          </div>
+        </aside>
+
+        <!-- Code Workspace -->
+        <div class="editor-workspace">
+          <div class="editor-line-numbers" id="editor-line-numbers">1</div>
+          <textarea class="editor-textarea" id="editor-textarea" spellcheck="false" placeholder="Select a file from the sidebar to view and edit..."></textarea>
+        </div>
+      </div>
+
+      <div class="editor-footer">
+        <div class="editor-footer-left">
+          <i class="fas fa-circle-info" style="color:var(--cyan)"></i>
+          <span id="editor-status-text">Ready</span>
+        </div>
+        <div class="editor-footer-right">
+          <span class="editor-shortcut-hint"><kbd>Ctrl</kbd>+<kbd>S</kbd> Save</span>
+          <span class="editor-shortcut-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> Save & Deploy</span>
+          <span id="editor-lines-count">Lines: 1</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Create New File -->
+  <div class="modal-backdrop hidden" id="new-file-modal">
+    <div class="modal">
+      <div class="modal-icon cyan"><i class="fas fa-file-circle-plus"></i></div>
+      <div class="modal-title">Create New File</div>
+      <div class="modal-message">Enter file name with extension (e.g. <code>.env</code>, <code>config.json</code>, <code>utils.py</code>)</div>
+      <div style="margin: 16px 0;">
+        <input type="text" class="modal-text-input" id="new-filename-input" placeholder="filename.py">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="new-file-cancel">Cancel</button>
+        <button class="btn btn-primary" id="new-file-confirm"><i class="fas fa-plus"></i> Create File</button>
       </div>
     </div>
   </div>

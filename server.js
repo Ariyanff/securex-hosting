@@ -950,6 +950,156 @@ function listFilesRecursive(baseDir, currentDir, entryPoint) {
     return results;
 }
 
+function safeFilePath(baseDir, reqPath) {
+    if (!reqPath || typeof reqPath !== 'string') {
+        throw new Error('Invalid file path');
+    }
+    const safeBase = path.resolve(baseDir);
+    const resolved = path.resolve(safeBase, reqPath);
+    if (!resolved.startsWith(safeBase)) {
+        throw new Error('Access denied: Path outside bot directory');
+    }
+    return resolved;
+}
+
+// ─── GET /api/bots/:id/file — Read file content ──────────────────────────────
+app.get('/api/bots/:id/file', (req, res) => {
+    const bot = findBot(req.params.id);
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
+    const relPath = req.query.file;
+    if (!relPath) return res.status(400).json({ error: 'File path required' });
+
+    try {
+        const filePath = safeFilePath(bot.dir, relPath);
+        if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+        const content = fs.readFileSync(filePath, 'utf-8');
+        res.json({
+            filename: relPath,
+            content,
+            size: fs.statSync(filePath).size
+        });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// ─── POST /api/bots/:id/file — Save file content ─────────────────────────────
+app.post('/api/bots/:id/file', (req, res) => {
+    const bot = findBot(req.params.id);
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
+    const { file: relPath, content } = req.body;
+    if (!relPath || typeof content !== 'string') {
+        return res.status(400).json({ error: 'File path and content are required' });
+    }
+
+    try {
+        const filePath = safeFilePath(bot.dir, relPath);
+        const parentDir = path.dirname(filePath);
+        if (!fs.existsSync(parentDir)) {
+            fs.mkdirSync(parentDir, { recursive: true });
+        }
+        fs.writeFileSync(filePath, content, 'utf-8');
+        bot.fileSize = dirSize(bot.dir);
+        bot.fileCount = countFiles(bot.dir);
+        saveBots();
+        addLog(bot.id, `[SecureX] 💾 File '${relPath}' updated successfully.`);
+        res.json({ success: true, message: `File '${relPath}' saved successfully.` });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to save file: ' + err.message });
+    }
+});
+
+// ─── POST /api/bots/:id/file/save-deploy — Save file & Deploy/Restart ────────
+app.post('/api/bots/:id/file/save-deploy', async (req, res) => {
+    const bot = findBot(req.params.id);
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
+    const { file: relPath, content } = req.body;
+    if (!relPath || typeof content !== 'string') {
+        return res.status(400).json({ error: 'File path and content are required' });
+    }
+
+    try {
+        const filePath = safeFilePath(bot.dir, relPath);
+        const parentDir = path.dirname(filePath);
+        if (!fs.existsSync(parentDir)) {
+            fs.mkdirSync(parentDir, { recursive: true });
+        }
+        fs.writeFileSync(filePath, content, 'utf-8');
+        bot.fileSize = dirSize(bot.dir);
+        bot.fileCount = countFiles(bot.dir);
+
+        if (!bot.entryPoint || !fs.existsSync(path.join(bot.dir, bot.entryPoint))) {
+            bot.entryPoint = detectEntryPoint(bot.dir) || relPath;
+        }
+
+        addLog(bot.id, `[SecureX] 🚀 Saved '${relPath}' — Initiating redeployment ...`);
+
+        res.json({ success: true, message: 'File saved! Bot is redeploying ...' });
+
+        if (bot.status === 'running' || processes.has(bot.id)) {
+            await stopBot(bot);
+        }
+        bot.restarts++;
+        saveBots();
+        await startBot(bot);
+    } catch (err) {
+        console.error('[SecureX] Save & Deploy error:', err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to deploy: ' + err.message });
+        }
+    }
+});
+
+// ─── POST /api/bots/:id/file/create — Create new file ────────────────────────
+app.post('/api/bots/:id/file/create', (req, res) => {
+    const bot = findBot(req.params.id);
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
+    const { filename } = req.body;
+    if (!filename) return res.status(400).json({ error: 'Filename is required' });
+
+    try {
+        const filePath = safeFilePath(bot.dir, filename);
+        if (fs.existsSync(filePath)) {
+            return res.status(400).json({ error: 'File already exists' });
+        }
+        const parentDir = path.dirname(filePath);
+        if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+        fs.writeFileSync(filePath, '', 'utf-8');
+        bot.fileSize = dirSize(bot.dir);
+        bot.fileCount = countFiles(bot.dir);
+        saveBots();
+        addLog(bot.id, `[SecureX] 📄 Created file '${filename}'.`);
+        res.json({ success: true, message: `File '${filename}' created.` });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create file: ' + err.message });
+    }
+});
+
+// ─── DELETE /api/bots/:id/file — Delete file ─────────────────────────────────
+app.delete('/api/bots/:id/file', (req, res) => {
+    const bot = findBot(req.params.id);
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
+    const relPath = req.query.file;
+    if (!relPath) return res.status(400).json({ error: 'Filename is required' });
+
+    try {
+        const filePath = safeFilePath(bot.dir, relPath);
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+        fs.unlinkSync(filePath);
+        bot.fileSize = dirSize(bot.dir);
+        bot.fileCount = countFiles(bot.dir);
+        saveBots();
+        addLog(bot.id, `[SecureX] 🗑️ Deleted file '${relPath}'.`);
+        res.json({ success: true, message: `File '${relPath}' deleted.` });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete file: ' + err.message });
+    }
+});
+
 // ─── Error handling middleware ────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
     if (err instanceof multer.MulterError) {
@@ -1028,7 +1178,7 @@ process.on('SIGTERM', gracefulShutdown);
 server.listen(PORT, '0.0.0.0', () => {
     console.log('');
     console.log('  ╔═══════════════════════════════════════════════╗');
-    console.log('  ║           SENPAI  ·  Hosting Panel            ║');
+    console.log('  ║          SecureX  ·  Hosting Panel            ║');
     console.log('  ╠═══════════════════════════════════════════════╣');
     console.log(`  ║  🌐  http://localhost:${PORT}                    ║`);
     console.log(`  ║  🐍  Python: ${PYTHON_CMD.padEnd(32)}║`);

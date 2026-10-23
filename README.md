@@ -1,24 +1,24 @@
 ---
-title: SENPAI Bot Hosting
+title: SecureX Hosting
 emoji: 🚀
-colorFrom: red
-colorTo: gray
+colorFrom: purple
+colorTo: cyan
 sdk: docker
 app_port: 3000
 ---
-# 🔥 SENPAI — Discord Bot Hosting Panel
+# ⚡ SecureX Hosting — Discord Bot Hosting Panel
 
-Premium dark-themed web panel for uploading, managing, and monitoring Discord bots.
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/senpaiariyan/senpai-bot-hosting)
+Premium dark-themed web panel featuring a Purple + Cyan neon glow UI for uploading, managing, editing, and monitoring Discord bots with live in-browser code editor and Save & Deploy functionality.
 
 ## Features
 - ☁️ Upload `.py` or `.zip` bot files  
+- 📝 **Live In-Browser File Editor** (Edit bot code directly)
+- 🚀 **Save & Deploy (सेव डिप्लॉय)** button with instant redeployment
 - ▶️ Start / Stop / Restart bots  
 - 📋 Live console logs via WebSocket  
-- 📁 File manager  
-- 🛡️ Admin panel with system info  
-- 🎨 Premium dark UI with red accents  
+- 📁 Interactive file manager  
+- 🛡️ Admin panel with system metrics  
+- 🎨 Ultra-premium lag-free Purple + Cyan neon glow UI  
 
 ## Deploy to Render (Free)
 

@@ -1,7 +1,7 @@
 {
-  "name": "senpai-bot-hosting",
+  "name": "securex-hosting",
   "version": "1.0.0",
-  "description": "SENPAI - Discord Bot Hosting Panel",
+  "description": "SecureX Hosting - Discord Bot Hosting Panel",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

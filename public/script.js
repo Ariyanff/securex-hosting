@@ -445,6 +445,7 @@
             : `<button class="btn btn-warning btn-sm" data-action="stop" data-bot-id="${bot.id}" title="Stop">⏹ Stop</button>`
           }
           <button class="btn btn-info btn-sm" data-action="restart" data-bot-id="${bot.id}" title="Restart" ${isStopped ? 'disabled' : ''}>↻ Restart</button>
+          <button class="btn btn-outline-cyan btn-sm" data-action="editor" data-bot-id="${bot.id}" title="Edit Files & Code">📁 Files / Edit</button>
           <button class="btn btn-secondary btn-sm" data-action="console" data-bot-id="${bot.id}" title="Console">⌨ Console</button>
           <button class="btn btn-primary btn-sm" data-action="logs" data-bot-id="${bot.id}" title="Full Logs">📋 Logs</button>
           <button class="btn btn-danger btn-sm" data-action="delete" data-bot-id="${bot.id}" title="Delete">🗑 Delete</button>
@@ -481,6 +482,7 @@
         case 'start':   startBot(botId); break;
         case 'stop':    stopBot(botId); break;
         case 'restart': restartBot(botId); break;
+        case 'editor':  openEditor(botId); break;
         case 'delete':  deleteBot(botId); break;
         case 'console': toggleConsole(botId); break;
         case 'logs':    openLogs(botId); break;
@@ -750,15 +752,21 @@
                 <span class="file-group-name">${escapeHtml(bot.name)}</span>
                 <span class="file-group-meta">${files.length} file${files.length !== 1 ? 's' : ''} · ${formatFileSize(botTotalSize)}</span>
               </div>
-              <span class="file-group-chevron">▸</span>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <button class="btn btn-xs btn-outline-cyan" onclick="event.stopPropagation(); openEditor('${bot.id}')" title="Edit Bot Files">
+                  <i class="fas fa-code"></i> Edit Files
+                </button>
+                <span class="file-group-chevron">▸</span>
+              </div>
             </div>
             <div class="file-list" id="file-list-${bot.id}" style="display:none">
               ${files.length === 0 ? '<div class="file-empty">No files found</div>' : ''}
               ${files.map(f => `
-                <div class="file-item ${f.isEntryPoint ? 'file-entry-point' : ''}">
+                <div class="file-item ${f.isEntryPoint ? 'file-entry-point' : ''}" data-open-editor="true" data-bot-id="${bot.id}" data-file-name="${escapeHtml(f.name)}" style="cursor:pointer;" title="Click to open and edit file">
                   <span class="file-icon">${f.isEntryPoint ? '⚡' : '📄'}</span>
                   <span class="file-name" title="${escapeHtml(f.path || f.name)}">${escapeHtml(f.name)}</span>
                   <span class="file-size">${formatFileSize(f.size)}</span>
+                  <span class="btn-xs btn-outline-cyan" style="padding:2px 6px;font-size:10px;border-radius:4px;"><i class="fas fa-pen-to-square"></i> Edit</span>
                   ${f.isEntryPoint ? '<span class="file-badge">Entry</span>' : ''}
                 </div>
               `).join('')}
@@ -1068,6 +1076,373 @@
     }
   }
 
+  // ─── Code & File Editor with Save & Deploy ────────────────────────────────
+  let currentEditorBotId = null;
+  let currentEditorFile = null;
+  let isEditorDirty = false;
+  let editorFilesCache = [];
+
+  function openEditor(botId, targetFile = null) {
+    currentEditorBotId = botId;
+    isEditorDirty = false;
+    
+    const bot = botsCache.find(b => b.id === botId);
+    const modal = $('#editor-modal');
+    const botNameEl = $('#editor-bot-name');
+    const statusPill = $('#editor-bot-status-pill');
+    const dirtyEl = $('#editor-dirty');
+
+    if (!modal) return;
+
+    if (botNameEl) botNameEl.textContent = bot ? bot.name : 'Bot Files';
+    if (statusPill && bot) {
+      statusPill.textContent = (bot.status || 'STOPPED').toUpperCase();
+      statusPill.style.color = bot.status === 'running' ? '#34d399' : '#94a3b8';
+      statusPill.style.background = bot.status === 'running' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(148, 163, 184, 0.2)';
+    }
+
+    if (dirtyEl) dirtyEl.classList.add('hidden');
+    modal.classList.remove('hidden');
+
+    loadEditorFileList(botId, targetFile);
+  }
+  window.openEditor = openEditor;
+
+  function closeEditor() {
+    if (isEditorDirty) {
+      if (!confirm('You have unsaved changes. Are you sure you want to close without saving?')) {
+        return;
+      }
+    }
+    const modal = $('#editor-modal');
+    if (modal) modal.classList.add('hidden');
+    currentEditorBotId = null;
+    currentEditorFile = null;
+    isEditorDirty = false;
+  }
+
+  async function loadEditorFileList(botId, targetFile = null) {
+    const listContainer = $('#editor-file-list');
+    if (!listContainer) return;
+    listContainer.innerHTML = '<div class="editor-loading-files"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+
+    try {
+      const files = await apiFetch(`/api/bots/${botId}/files`);
+      editorFilesCache = files || [];
+
+      if (!files || files.length === 0) {
+        listContainer.innerHTML = '<div class="editor-loading-files">No files found.<br><button class="btn btn-xs btn-outline-cyan" style="margin-top:8px;" id="editor-empty-new-file"><i class="fas fa-plus"></i> Create File</button></div>';
+        const emptyBtn = $('#editor-empty-new-file');
+        if (emptyBtn) emptyBtn.onclick = openNewFileModal;
+        $('#editor-textarea').value = '';
+        $('#editor-current-path').textContent = 'No file selected';
+        updateLineNumbers();
+        return;
+      }
+
+      listContainer.innerHTML = files.map(f => {
+        const isEntry = f.isEntryPoint;
+        const icon = f.name.endsWith('.py') ? 'fa-brands fa-python' :
+                     f.name.endsWith('.js') ? 'fa-brands fa-node-js' :
+                     f.name.endsWith('.json') ? 'fa-solid fa-code' :
+                     f.name.endsWith('.txt') ? 'fa-solid fa-file-lines' :
+                     f.name.startsWith('.') ? 'fa-solid fa-gear' : 'fa-solid fa-file';
+        return `
+          <div class="editor-file-item" data-filename="${escapeHtml(f.name)}" title="${escapeHtml(f.name)}">
+            <i class="${icon}" style="font-size:12px;color:${isEntry ? 'var(--accent-cyan)' : 'var(--text-muted)'}"></i>
+            <span class="file-item-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(f.name)}</span>
+            <button class="file-del-btn" data-delete-file="${escapeHtml(f.name)}" title="Delete file">
+              <i class="fas fa-trash-can"></i>
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      let fileToOpen = targetFile;
+      if (!fileToOpen) {
+        const entry = files.find(f => f.isEntryPoint);
+        fileToOpen = entry ? entry.name : files[0].name;
+      }
+      loadEditorFile(botId, fileToOpen);
+    } catch (err) {
+      listContainer.innerHTML = '<div class="editor-loading-files" style="color:var(--accent-danger)">Failed to load files</div>';
+    }
+  }
+
+  async function loadEditorFile(botId, filePath) {
+    if (isEditorDirty) {
+      if (!confirm(`You have unsaved changes in '${currentEditorFile}'. Discard and switch to '${filePath}'?`)) {
+        return;
+      }
+    }
+
+    currentEditorFile = filePath;
+    isEditorDirty = false;
+
+    const pathEl = $('#editor-current-path');
+    const textarea = $('#editor-textarea');
+    const statusText = $('#editor-status-text');
+    const dirtyEl = $('#editor-dirty');
+
+    if (pathEl) pathEl.textContent = filePath;
+    if (dirtyEl) dirtyEl.classList.add('hidden');
+    if (statusText) statusText.textContent = `Loading ${filePath}...`;
+
+    $$('.editor-file-item').forEach(el => {
+      if (el.dataset.filename === filePath) {
+        el.classList.add('active');
+      } else {
+        el.classList.remove('active');
+      }
+    });
+
+    try {
+      const data = await apiFetch(`/api/bots/${botId}/file?file=${encodeURIComponent(filePath)}`);
+      if (textarea) {
+        textarea.value = data.content != null ? data.content : '';
+        updateLineNumbers();
+      }
+      if (statusText) statusText.textContent = `Loaded ${filePath} (${formatFileSize(data.size || 0)})`;
+    } catch (err) {
+      if (statusText) statusText.textContent = `Error loading file: ${err.message}`;
+      showToast(err.message || 'Failed to load file content', 'error');
+    }
+  }
+
+  async function saveEditorFile(deploy = false) {
+    if (!currentEditorBotId || !currentEditorFile) {
+      showToast('No file open to save', 'warning');
+      return;
+    }
+
+    const textarea = $('#editor-textarea');
+    const statusText = $('#editor-status-text');
+    const dirtyEl = $('#editor-dirty');
+    const deployBtn = $('#editor-deploy-btn');
+    const saveBtn = $('#editor-save-btn');
+
+    const content = textarea ? textarea.value : '';
+
+    if (deploy) {
+      if (deployBtn) {
+        deployBtn.disabled = true;
+        deployBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Deploying...</span>';
+      }
+      if (statusText) statusText.textContent = `Deploying ${currentEditorFile}...`;
+    } else {
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Saving...</span>';
+      }
+      if (statusText) statusText.textContent = `Saving ${currentEditorFile}...`;
+    }
+
+    const endpoint = deploy ? `/api/bots/${currentEditorBotId}/file/save-deploy` : `/api/bots/${currentEditorBotId}/file`;
+
+    try {
+      await apiFetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: currentEditorFile, content })
+      });
+
+      isEditorDirty = false;
+      if (dirtyEl) dirtyEl.classList.add('hidden');
+
+      if (deploy) {
+        showToast('🚀 File saved & Bot redeployed successfully!', 'success');
+        if (statusText) statusText.textContent = `✓ Saved & Redeployed ${currentEditorFile} successfully!`;
+        await refreshDashboard();
+        const statusPill = $('#editor-bot-status-pill');
+        if (statusPill) {
+          statusPill.textContent = 'RUNNING';
+          statusPill.style.color = '#34d399';
+          statusPill.style.background = 'rgba(16, 185, 129, 0.2)';
+        }
+      } else {
+        showToast(`💾 Saved ${currentEditorFile}`, 'success');
+        if (statusText) statusText.textContent = `✓ Saved ${currentEditorFile}`;
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to save file', 'error');
+      if (statusText) statusText.textContent = `✗ Save failed: ${err.message}`;
+    } finally {
+      if (deployBtn) {
+        deployBtn.disabled = false;
+        deployBtn.innerHTML = '<i class="fas fa-rocket"></i> <span>Save & Deploy</span>';
+      }
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-floppy-disk"></i> <span>Save</span>';
+      }
+    }
+  }
+
+  function updateLineNumbers() {
+    const textarea = $('#editor-textarea');
+    const lineNumbers = $('#editor-line-numbers');
+    const linesCountEl = $('#editor-lines-count');
+    if (!textarea || !lineNumbers) return;
+
+    const lines = (textarea.value || '').split('\n').length;
+    let numbersHtml = '';
+    for (let i = 1; i <= lines; i++) {
+      numbersHtml += `<div>${i}</div>`;
+    }
+    lineNumbers.innerHTML = numbersHtml;
+    if (linesCountEl) linesCountEl.textContent = `Lines: ${lines}`;
+  }
+
+  function openNewFileModal() {
+    const modal = $('#new-file-modal');
+    const input = $('#new-filename-input');
+    if (!modal) return;
+    if (input) {
+      input.value = '';
+      setTimeout(() => input.focus(), 50);
+    }
+    modal.classList.remove('hidden');
+  }
+
+  function closeNewFileModal() {
+    const modal = $('#new-file-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async function createNewFile() {
+    if (!currentEditorBotId) return;
+    const input = $('#new-filename-input');
+    const filename = input ? input.value.trim() : '';
+
+    if (!filename) {
+      showToast('Please enter a valid file name', 'warning');
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/bots/${currentEditorBotId}/file/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename })
+      });
+
+      showToast(`Created file '${filename}'`, 'success');
+      closeNewFileModal();
+      await loadEditorFileList(currentEditorBotId, filename);
+    } catch (err) {
+      showToast(err.message || 'Failed to create file', 'error');
+    }
+  }
+
+  async function deleteEditorFile(filePath) {
+    if (!confirm(`Are you sure you want to delete '${filePath}'? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/bots/${currentEditorBotId}/file?file=${encodeURIComponent(filePath)}`, {
+        method: 'DELETE'
+      });
+
+      showToast(`Deleted file '${filePath}'`, 'success');
+      await loadEditorFileList(currentEditorBotId);
+    } catch (err) {
+      showToast(err.message || 'Failed to delete file', 'error');
+    }
+  }
+
+  function initEditor() {
+    const textarea = $('#editor-textarea');
+    const lineNumbers = $('#editor-line-numbers');
+    const saveBtn = $('#editor-save-btn');
+    const deployBtn = $('#editor-deploy-btn');
+    const closeBtn = $('#editor-close-btn');
+    const newFileBtn = $('#editor-new-file-btn');
+    const refreshFilesBtn = $('#editor-refresh-files');
+    const dirtyEl = $('#editor-dirty');
+
+    if (textarea && lineNumbers) {
+      textarea.addEventListener('scroll', () => {
+        lineNumbers.scrollTop = textarea.scrollTop;
+      });
+
+      textarea.addEventListener('input', () => {
+        updateLineNumbers();
+        if (!isEditorDirty) {
+          isEditorDirty = true;
+          if (dirtyEl) dirtyEl.classList.remove('hidden');
+        }
+      });
+
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
+          textarea.selectionStart = textarea.selectionEnd = start + 4;
+          updateLineNumbers();
+          if (!isEditorDirty) {
+            isEditorDirty = true;
+            if (dirtyEl) dirtyEl.classList.remove('hidden');
+          }
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          saveEditorFile(false);
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          saveEditorFile(true);
+        }
+      });
+    }
+
+    if (saveBtn) saveBtn.onclick = () => saveEditorFile(false);
+    if (deployBtn) deployBtn.onclick = () => saveEditorFile(true);
+    if (closeBtn) closeBtn.onclick = closeEditor;
+    if (newFileBtn) newFileBtn.onclick = openNewFileModal;
+    if (refreshFilesBtn) refreshFilesBtn.onclick = () => {
+      if (currentEditorBotId) loadEditorFileList(currentEditorBotId, currentEditorFile);
+    };
+
+    const fileListEl = $('#editor-file-list');
+    if (fileListEl) {
+      fileListEl.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('[data-delete-file]');
+        if (delBtn) {
+          e.stopPropagation();
+          deleteEditorFile(delBtn.dataset.deleteFile);
+          return;
+        }
+
+        const item = e.target.closest('.editor-file-item');
+        if (item && item.dataset.filename) {
+          loadEditorFile(currentEditorBotId, item.dataset.filename);
+        }
+      });
+    }
+
+    const newFileCancel = $('#new-file-cancel');
+    const newFileConfirm = $('#new-file-confirm');
+    const newFileInput = $('#new-filename-input');
+    if (newFileCancel) newFileCancel.onclick = closeNewFileModal;
+    if (newFileConfirm) newFileConfirm.onclick = createNewFile;
+    if (newFileInput) {
+      newFileInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') createNewFile();
+      });
+    }
+
+    const filesContainer = $('#files-container');
+    if (filesContainer) {
+      filesContainer.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-open-editor]');
+        if (item && item.dataset.botId) {
+          openEditor(item.dataset.botId, item.dataset.fileName);
+        }
+      });
+    }
+  }
+
   // ─── Initialization ───────────────────────────────────────────────────────
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -1076,6 +1451,7 @@
     initUpload();
     initBotCardEvents();
     initFileGroupToggle();
+    initEditor();
     loadDashboard();
 
     // Auto-refresh dashboard every 10 seconds
