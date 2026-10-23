@@ -2754,3 +2754,326 @@ body {
     width: 140px;
   }
 }
+
+/* ============================================
+   3D Cards, Running Neon Border Beam & Cyber Grid
+   ============================================ */
+
+/* Cyber Grid Atmosphere */
+body {
+  background-color: #060411 !important;
+  background-image: 
+    radial-gradient(at 15% 15%, rgba(139, 92, 246, 0.18) 0px, transparent 50%),
+    radial-gradient(at 85% 85%, rgba(6, 182, 212, 0.14) 0px, transparent 50%),
+    radial-gradient(rgba(139, 92, 246, 0.12) 1px, transparent 1px) !important;
+  background-size: 100% 100%, 100% 100%, 28px 28px !important;
+  background-attachment: fixed !important;
+}
+
+/* RUNNING NEON BORDER BEAM (कॉर्नर में घूमने वाली रनिंग लाइट) */
+.beam-card-wrapper {
+  position: relative;
+  border-radius: var(--radius-lg);
+  padding: 1.5px;
+  overflow: hidden;
+  background: rgba(139, 92, 246, 0.12);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+.beam-card-wrapper::before {
+  content: '';
+  position: absolute;
+  width: 250%;
+  height: 250%;
+  top: -75%;
+  left: -75%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 260deg,
+    rgba(6, 182, 212, 0.6) 300deg,
+    #06b6d4 330deg,
+    #8b5cf6 350deg,
+    #ffffff 360deg
+  );
+  animation: borderBeamRotate 4s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+
+.beam-card-wrapper:hover::before {
+  animation-duration: 2.2s;
+}
+
+.beam-card-wrapper:hover {
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.3), 0 0 15px rgba(6, 182, 212, 0.25);
+}
+
+.beam-card-inner {
+  position: relative;
+  z-index: 1;
+  background: #0d0922;
+  border-radius: calc(var(--radius-lg) - 1.5px);
+  height: 100%;
+  overflow: hidden;
+}
+
+@keyframes borderBeamRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 3D TILT & PARALLAX GLASS SURFACE */
+.tilt-card {
+  position: relative;
+  height: 100%;
+  transition: transform 0.15s ease-out;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.card-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.14), transparent 65%);
+}
+
+.tilt-card:hover .card-shine {
+  opacity: 1;
+}
+
+/* Stat card beam wrapper adjustments */
+.stat-beam-wrapper .stat-card {
+  margin: 0;
+  border: none;
+  background: transparent;
+}
+.stat-beam-wrapper .stat-card:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Top Header Telemetry */
+.header-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 16px;
+}
+
+.telemetry-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 20px;
+  background: rgba(16, 185, 129, 0.14);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  letter-spacing: 0.5px;
+}
+
+.telemetry-pill.latency {
+  background: rgba(6, 182, 212, 0.14);
+  color: var(--accent-cyan-light);
+  border-color: rgba(6, 182, 212, 0.35);
+}
+
+/* DASHBOARD TOOLBAR: SEARCH & FILTERS */
+.dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 26px 0 20px 0;
+  flex-wrap: wrap;
+}
+
+.search-box-wrapper {
+  position: relative;
+  flex: 1;
+  max-width: 440px;
+  min-width: 260px;
+}
+
+.search-box-wrapper .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 11px 36px 11px 40px;
+  background: rgba(13, 9, 32, 0.85);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.search-input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 22px var(--accent-cyan-glow);
+  background: rgba(18, 13, 44, 0.95);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.search-clear-btn:hover {
+  color: #fff;
+}
+
+.search-clear-btn.hidden {
+  display: none;
+}
+
+.filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(13, 9, 32, 0.85);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.filter-tab {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-tab:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.filter-tab.active {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.35), rgba(6, 182, 212, 0.25));
+  color: #fff;
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 16px var(--accent-purple-glow);
+}
+
+.tab-count {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+/* BOT CARD PRO TELEMETRY & COPY BADGE */
+.bot-id-copy-badge {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s;
+  margin-top: 6px;
+}
+
+.bot-id-copy-badge:hover {
+  color: var(--accent-cyan-light);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px var(--accent-cyan-glow);
+}
+
+.bot-meter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.bot-meter-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.bot-meter-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.bot-meter-fill {
+  height: 100%;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-cyan));
+  box-shadow: 0 0 10px var(--accent-cyan-glow);
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Pulsing radar sonar on running status badge */
+.status-badge.status-running {
+  position: relative;
+}
+
+.status-badge.status-running::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  left: 9px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.7);
+  animation: radarPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes radarPing {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(2.8); opacity: 0; }
+}

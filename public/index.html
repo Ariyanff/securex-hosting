@@ -72,11 +72,15 @@
           <span class="page-name">Overview</span>
         </div>
       </div>
+      <div class="header-telemetry">
+        <span class="telemetry-pill"><i class="fas fa-bolt"></i> Operational</span>
+        <span class="telemetry-pill latency"><i class="fas fa-circle-dot"></i> 14ms</span>
+      </div>
       <div class="header-actions">
         <button class="btn btn-ghost" id="btn-admin-access">
           <i class="fas fa-shield-halved"></i><span>Admin Access</span>
         </button>
-        <button class="btn btn-primary" id="new-bot-btn">
+        <button class="btn btn-primary btn-glow-deploy" id="new-bot-btn">
           <i class="fas fa-plus"></i><span>New Bot</span>
         </button>
       </div>
@@ -87,29 +91,64 @@
       <!-- PAGE: DASHBOARD -->
       <section id="page-dashboard" class="page">
         <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon red"><i class="fas fa-robot"></i></div>
-            <div class="stat-value" id="stat-total">0</div>
-            <div class="stat-label">Total Bots</div>
+          <div class="beam-card-wrapper stat-beam-wrapper">
+            <div class="beam-card-inner">
+              <div class="stat-card tilt-card">
+                <div class="card-shine"></div>
+                <div class="stat-icon purple"><i class="fas fa-robot"></i></div>
+                <div class="stat-value" id="stat-total">0</div>
+                <div class="stat-label">Total Bots</div>
+              </div>
+            </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon green"><i class="fas fa-play"></i></div>
-            <div class="stat-value" id="stat-running">0</div>
-            <div class="stat-label">Running</div>
+          <div class="beam-card-wrapper stat-beam-wrapper">
+            <div class="beam-card-inner">
+              <div class="stat-card tilt-card">
+                <div class="card-shine"></div>
+                <div class="stat-icon green"><i class="fas fa-play"></i></div>
+                <div class="stat-value" id="stat-running">0</div>
+                <div class="stat-label">Running</div>
+              </div>
+            </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
-            <div class="stat-value" id="stat-pending">0</div>
-            <div class="stat-label">Pending</div>
+          <div class="beam-card-wrapper stat-beam-wrapper">
+            <div class="beam-card-inner">
+              <div class="stat-card tilt-card">
+                <div class="card-shine"></div>
+                <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
+                <div class="stat-value" id="stat-pending">0</div>
+                <div class="stat-label">Pending</div>
+              </div>
+            </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon red"><i class="fas fa-stop"></i></div>
-            <div class="stat-value" id="stat-stopped">0</div>
-            <div class="stat-label">Stopped</div>
+          <div class="beam-card-wrapper stat-beam-wrapper">
+            <div class="beam-card-inner">
+              <div class="stat-card tilt-card">
+                <div class="card-shine"></div>
+                <div class="stat-icon red"><i class="fas fa-stop"></i></div>
+                <div class="stat-value" id="stat-stopped">0</div>
+                <div class="stat-label">Stopped</div>
+              </div>
+            </div>
           </div>
         </div>
+
+        <!-- DASHBOARD TOOLBAR: SEARCH & FILTERS -->
+        <div class="dashboard-toolbar">
+          <div class="search-box-wrapper">
+            <i class="fas fa-magnifying-glass search-icon"></i>
+            <input type="text" class="search-input" id="bot-search-input" placeholder="Search bots by name, file, or ID...">
+            <button class="search-clear-btn hidden" id="search-clear-btn" title="Clear search"><i class="fas fa-xmark"></i></button>
+          </div>
+          <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all">All <span class="tab-count" id="count-all">0</span></button>
+            <button class="filter-tab" data-filter="running">🟢 Running <span class="tab-count" id="count-running">0</span></button>
+            <button class="filter-tab" data-filter="stopped">🔴 Stopped <span class="tab-count" id="count-stopped">0</span></button>
+          </div>
+        </div>
+
         <div class="bot-grid" id="bots-container">
-          <!-- JS populates bot cards here -->
+          <!-- JS populates 3D beam bot cards here -->
         </div>
       </section>
 

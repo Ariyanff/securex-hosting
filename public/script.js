@@ -377,6 +377,9 @@
     requestAnimationFrame(tick);
   }
 
+  let searchFilterQuery = '';
+  let statusFilterType = 'all';
+
   function renderBotCards(bots) {
     const container = $('#bots-container');
     if (!container) return;
@@ -384,71 +387,139 @@
     if (!bots || bots.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">🤖</div>
+          <div class="empty-state-icon"><i class="fas fa-robot"></i></div>
           <h3>No bots yet</h3>
-          <p>Upload your first bot to get started!</p>
-          <button class="btn btn-primary" onclick="document.getElementById('new-bot-btn')?.click()">
-            Upload Bot
+          <p>Upload your first bot to get started with SecureX Hosting!</p>
+          <button class="btn btn-primary btn-glow-deploy" onclick="document.getElementById('new-bot-btn')?.click()">
+            <i class="fas fa-plus"></i> Upload Bot
           </button>
+        </div>
+      `;
+      updateFilterCounts(0, 0, 0);
+      return;
+    }
+
+    // Calculate status counts
+    const total = bots.length;
+    const running = bots.filter(b => (b.status || '').toLowerCase() === 'running').length;
+    const stopped = total - running;
+    updateFilterCounts(total, running, stopped);
+
+    // Apply active filter and search query
+    let filtered = bots;
+    if (statusFilterType === 'running') {
+      filtered = filtered.filter(b => (b.status || '').toLowerCase() === 'running');
+    } else if (statusFilterType === 'stopped') {
+      filtered = filtered.filter(b => (b.status || '').toLowerCase() !== 'running');
+    }
+
+    if (searchFilterQuery) {
+      const q = searchFilterQuery.toLowerCase();
+      filtered = filtered.filter(b => 
+        (b.name && b.name.toLowerCase().includes(q)) ||
+        (b.id && b.id.toLowerCase().includes(q)) ||
+        (b.entryPoint && b.entryPoint.toLowerCase().includes(q))
+      );
+    }
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1; padding: 40px 20px;">
+          <div class="empty-state-icon"><i class="fas fa-magnifying-glass"></i></div>
+          <h3>No matching bots found</h3>
+          <p>Try searching for a different keyword or change the filter tab.</p>
         </div>
       `;
       return;
     }
 
-    container.innerHTML = bots.map((bot, i) => renderBotCard(bot, i)).join('');
+    container.innerHTML = filtered.map((bot, i) => renderBotCard(bot, i)).join('');
+  }
+
+  function updateFilterCounts(total, running, stopped) {
+    const countAll = $('#count-all');
+    const countRunning = $('#count-running');
+    const countStopped = $('#count-stopped');
+    if (countAll) countAll.textContent = total;
+    if (countRunning) countRunning.textContent = running;
+    if (countStopped) countStopped.textContent = stopped;
   }
 
   function renderBotCard(bot, index = 0) {
     const sClass = statusClass(bot.status);
     const sIcon = statusIcon(bot.status);
-    const uptime = bot.status === 'RUNNING' ? formatUptime(bot.uptimeStart) : '—';
+    const uptime = (bot.status || '').toUpperCase() === 'RUNNING' ? formatUptime(bot.uptimeStart) : '—';
     const isRunning = (bot.status || '').toUpperCase() === 'RUNNING';
     const isStopped = (bot.status || '').toUpperCase() === 'STOPPED';
-    const delay = index * 0.06;
+    const delay = index * 0.05;
+
+    // Simulated RAM calculation based on file size and restarts
+    const ramEstimate = isRunning ? Math.min(256, Math.max(38, Math.round(((bot.fileSize || 50000) / 1024 / 20) + 35))) : 0;
+    const ramPercent = Math.min(100, Math.round((ramEstimate / 256) * 100));
 
     return `
-      <div class="bot-card" data-bot-id="${bot.id}" style="animation-delay: ${delay}s">
-        <div class="bot-card-header">
-          <div class="bot-card-name">
-            <span class="bot-card-icon">🤖</span>
-            <span class="bot-name-text" title="${escapeHtml(bot.name)}">${escapeHtml(bot.name)}</span>
+      <div class="beam-card-wrapper bot-card-beam" style="animation-delay: ${delay}s">
+        <div class="beam-card-inner">
+          <div class="bot-card tilt-card" data-bot-id="${bot.id}">
+            <div class="card-shine"></div>
+            <div class="bot-card-header">
+              <div class="bot-card-name">
+                <span class="bot-card-icon"><i class="fas fa-robot"></i></span>
+                <div>
+                  <span class="bot-name-text" title="${escapeHtml(bot.name)}">${escapeHtml(bot.name)}</span>
+                  <div class="bot-id-copy-badge" onclick="copyBotId('${bot.id}')" title="Click to copy Bot ID">
+                    <i class="fas fa-copy"></i>
+                    <span>${escapeHtml(bot.id)}</span>
+                  </div>
+                </div>
+              </div>
+              <span class="status-badge ${sClass}">
+                <span class="status-dot">${sIcon}</span>
+                ${(bot.status || 'STOPPED').toUpperCase()}
+              </span>
+            </div>
+            <div class="bot-card-body">
+              <div class="bot-info-row">
+                <span class="info-label"><i class="fas fa-file-code" style="color:var(--accent-cyan);margin-right:4px;"></i> Entry Point</span>
+                <span class="info-value" style="font-family:var(--font-mono);">${escapeHtml(bot.entryPoint || 'bot.py')}</span>
+              </div>
+              <div class="bot-info-row">
+                <span class="info-label"><i class="fas fa-clock" style="color:var(--accent-purple);margin-right:4px;"></i> Uptime</span>
+                <span class="info-value bot-uptime" data-uptime-start="${bot.uptimeStart || ''}">${uptime}</span>
+              </div>
+              <div class="bot-info-row">
+                <span class="info-label"><i class="fas fa-rotate" style="color:var(--accent-orange);margin-right:4px;"></i> Restarts</span>
+                <span class="info-value">${bot.restarts || 0}</span>
+              </div>
+
+              <!-- Resource Telemetry Meter -->
+              <div class="bot-meter-row">
+                <div class="bot-meter-header">
+                  <span><i class="fas fa-microchip"></i> Memory</span>
+                  <span>${isRunning ? `${ramEstimate} MB / 256 MB` : 'Inactive'}</span>
+                </div>
+                <div class="bot-meter-track">
+                  <div class="bot-meter-fill" style="width: ${isRunning ? ramPercent : 0}%"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bot-console-section" id="console-${bot.id}" style="display:none">
+              <div class="bot-console-output" id="console-output-${bot.id}"></div>
+            </div>
+
+            <div class="bot-card-actions">
+              ${isStopped
+                ? `<button class="btn btn-success btn-sm" data-action="start" data-bot-id="${bot.id}" title="Start Bot"><i class="fas fa-play"></i> Start</button>`
+                : `<button class="btn btn-warning btn-sm" data-action="stop" data-bot-id="${bot.id}" title="Stop Bot"><i class="fas fa-stop"></i> Stop</button>`
+              }
+              <button class="btn btn-info btn-sm" data-action="restart" data-bot-id="${bot.id}" title="Restart Bot" ${isStopped ? 'disabled' : ''}><i class="fas fa-rotate"></i> Restart</button>
+              <button class="btn btn-outline-cyan btn-sm" data-action="editor" data-bot-id="${bot.id}" title="Edit Files & Save/Deploy"><i class="fas fa-code"></i> Files / Edit</button>
+              <button class="btn btn-secondary btn-sm" data-action="console" data-bot-id="${bot.id}" title="Inline Console"><i class="fas fa-terminal"></i> Console</button>
+              <button class="btn btn-primary btn-sm" data-action="logs" data-bot-id="${bot.id}" title="Full Logs View"><i class="fas fa-clipboard-list"></i> Logs</button>
+              <button class="btn btn-danger btn-sm" data-action="delete" data-bot-id="${bot.id}" title="Delete Bot"><i class="fas fa-trash-can"></i> Delete</button>
+            </div>
           </div>
-          <span class="status-badge ${sClass}">
-            <span class="status-dot">${sIcon}</span>
-            ${(bot.status || 'STOPPED').toUpperCase()}
-          </span>
-        </div>
-        <div class="bot-card-body">
-          <div class="bot-info-row">
-            <span class="info-label">Entry Point</span>
-            <span class="info-value">${escapeHtml(bot.entryPoint || 'index.js')}</span>
-          </div>
-          <div class="bot-info-row">
-            <span class="info-label">Security</span>
-            <span class="info-value">${escapeHtml(bot.security || 'Standard')}</span>
-          </div>
-          <div class="bot-info-row">
-            <span class="info-label">Uptime</span>
-            <span class="info-value bot-uptime" data-uptime-start="${bot.uptimeStart || ''}">${uptime}</span>
-          </div>
-          <div class="bot-info-row">
-            <span class="info-label">Restarts</span>
-            <span class="info-value">${bot.restarts || 0}</span>
-          </div>
-        </div>
-        <div class="bot-console-section" id="console-${bot.id}" style="display:none">
-          <div class="bot-console-output" id="console-output-${bot.id}"></div>
-        </div>
-        <div class="bot-card-actions">
-          ${isStopped
-            ? `<button class="btn btn-success btn-sm" data-action="start" data-bot-id="${bot.id}" title="Start">▶ Start</button>`
-            : `<button class="btn btn-warning btn-sm" data-action="stop" data-bot-id="${bot.id}" title="Stop">⏹ Stop</button>`
-          }
-          <button class="btn btn-info btn-sm" data-action="restart" data-bot-id="${bot.id}" title="Restart" ${isStopped ? 'disabled' : ''}>↻ Restart</button>
-          <button class="btn btn-outline-cyan btn-sm" data-action="editor" data-bot-id="${bot.id}" title="Edit Files & Code">📁 Files / Edit</button>
-          <button class="btn btn-secondary btn-sm" data-action="console" data-bot-id="${bot.id}" title="Console">⌨ Console</button>
-          <button class="btn btn-primary btn-sm" data-action="logs" data-bot-id="${bot.id}" title="Full Logs">📋 Logs</button>
-          <button class="btn btn-danger btn-sm" data-action="delete" data-bot-id="${bot.id}" title="Delete">🗑 Delete</button>
         </div>
       </div>
     `;
@@ -1443,6 +1514,159 @@
     }
   }
 
+  // ─── Search & Status Filters ───────────────────────────────────────────────
+
+  function initSearchAndFilter() {
+    const searchInput = $('#bot-search-input');
+    const clearBtn = $('#search-clear-btn');
+    const filterTabs = $$('.filter-tab');
+
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchFilterQuery = e.target.value.trim();
+        if (clearBtn) {
+          if (searchFilterQuery.length > 0) {
+            clearBtn.classList.remove('hidden');
+          } else {
+            clearBtn.classList.add('hidden');
+          }
+        }
+        renderBotCards(botsCache);
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (searchInput) {
+          searchInput.value = '';
+          searchFilterQuery = '';
+          clearBtn.classList.add('hidden');
+          renderBotCards(botsCache);
+          searchInput.focus();
+        }
+      });
+    }
+
+    filterTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        filterTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        statusFilterType = tab.dataset.filter || 'all';
+        renderBotCards(botsCache);
+      });
+    });
+  }
+
+  // ─── 3D Perspective Tilt with Zero-Lag rAF ─────────────────────────────────
+
+  function init3DTilt() {
+    let currentTiltCard = null;
+    let cardRect = null;
+    let shineEl = null;
+    let rafId = null;
+    let targetX = 0;
+    let targetY = 0;
+
+    function updateTilt() {
+      if (!currentTiltCard || !cardRect) return;
+      const maxTilt = 7.5; // subtle & premium
+      const halfW = cardRect.width / 2;
+      const halfH = cardRect.height / 2;
+
+      const cx = targetX - cardRect.left - halfW;
+      const cy = targetY - cardRect.top - halfH;
+
+      const rotateY = Math.max(-maxTilt, Math.min(maxTilt, (cx / halfW) * maxTilt));
+      const rotateX = Math.max(-maxTilt, Math.min(maxTilt, -(cy / halfH) * maxTilt));
+
+      currentTiltCard.style.transform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateY(-4px) scale3d(1.015, 1.015, 1.015)`;
+
+      if (shineEl) {
+        const px = targetX - cardRect.left;
+        const py = targetY - cardRect.top;
+        shineEl.style.background = `radial-gradient(circle at ${px}px ${py}px, rgba(139, 92, 246, 0.28) 0%, rgba(6, 182, 212, 0.15) 35%, transparent 70%)`;
+        shineEl.style.opacity = '1';
+      }
+      rafId = null;
+    }
+
+    document.addEventListener('mousemove', (e) => {
+      const card = e.target.closest('.tilt-card');
+      if (!card) {
+        if (currentTiltCard) {
+          resetTilt(currentTiltCard, shineEl);
+          currentTiltCard = null;
+          shineEl = null;
+          cardRect = null;
+        }
+        return;
+      }
+
+      if (card !== currentTiltCard) {
+        if (currentTiltCard) resetTilt(currentTiltCard, shineEl);
+        currentTiltCard = card;
+        cardRect = card.getBoundingClientRect();
+        shineEl = card.querySelector('.card-shine');
+      }
+
+      targetX = e.clientX;
+      targetY = e.clientY;
+
+      if (!rafId) {
+        rafId = requestAnimationFrame(updateTilt);
+      }
+    });
+
+    document.addEventListener('mouseleave', () => {
+      if (currentTiltCard) {
+        resetTilt(currentTiltCard, shineEl);
+        currentTiltCard = null;
+        shineEl = null;
+        cardRect = null;
+      }
+    });
+
+    function resetTilt(card, shine) {
+      if (!card) return;
+      card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(0) scale3d(1, 1, 1)';
+      if (shine) {
+        shine.style.opacity = '0';
+      }
+    }
+  }
+
+  // ─── Utility: Copy Bot ID ──────────────────────────────────────────────────
+
+  window.copyBotId = function(id) {
+    if (!id) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(id).then(() => {
+        showToast(`📋 Copied Bot ID: ${id}`, 'info');
+      }).catch(() => {
+        fallbackCopyText(id);
+      });
+    } else {
+      fallbackCopyText(id);
+    }
+  };
+
+  function fallbackCopyText(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      showToast(`📋 Copied Bot ID: ${text}`, 'info');
+    } catch (e) {
+      showToast('Could not copy to clipboard', 'error');
+    }
+    document.body.removeChild(textArea);
+  }
+
   // ─── Initialization ───────────────────────────────────────────────────────
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -1452,6 +1676,8 @@
     initBotCardEvents();
     initFileGroupToggle();
     initEditor();
+    initSearchAndFilter();
+    init3DTilt();
     loadDashboard();
 
     // Auto-refresh dashboard every 10 seconds

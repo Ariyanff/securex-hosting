@@ -634,7 +634,16 @@ app.get('/api/system', (_req, res) => {
         // Disk usage estimation (root volume)
         let diskUsage = { percentage: 0, usedGB: 0, totalGB: 0 };
         try {
-            if (process.platform === 'win32') {
+            if (fs.statfsSync) {
+                const stats = fs.statfsSync(process.cwd());
+                const total = Number(stats.bsize) * Number(stats.blocks);
+                const free = Number(stats.bsize) * Number(stats.bfree);
+                if (total > 0) {
+                    diskUsage.totalGB = (total / (1024 ** 3)).toFixed(1);
+                    diskUsage.usedGB = ((total - free) / (1024 ** 3)).toFixed(1);
+                    diskUsage.percentage = Math.round(((total - free) / total) * 100);
+                }
+            } else if (process.platform === 'win32') {
                 const output = execSync('wmic logicaldisk get size,freespace /format:csv', { encoding: 'utf8' });
                 const lines = output.split('\n').filter(l => l.includes(','));
                 if (lines.length > 1) {
