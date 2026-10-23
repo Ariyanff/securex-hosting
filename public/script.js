@@ -349,8 +349,10 @@
       setCounterValue($('#stat-pending'), stats.pending || 0);
       setCounterValue($('#stat-stopped'), stats.stopped || 0);
 
-      // Re-render cards to pick up any new/removed bots
-      renderBotCards(bots);
+      // Re-render cards only if no bot is currently running an animation
+      if (!activeLoadingBots || activeLoadingBots.size === 0) {
+        renderBotCards(bots);
+      }
     } catch (err) {
       console.error('Dashboard refresh failed:', err);
     }
@@ -561,34 +563,357 @@
     });
   }
 
-  // ─── Bot Controls ──────────────────────────────────────────────────────────
+  // ─── Bot Controls & 3D Circular Progress Engine ────────────────────────────
+
+  const activeLoadingBots = new Set();
+  const statusWaiters = new Map(); // botId -> Array of { targetStatus, resolve, reject, timer }
+
+  function notifyStatusWaiters(botId, status) {
+    if (!botId || !status) return;
+    const list = statusWaiters.get(botId);
+    if (!list || list.length === 0) return;
+    const current = status.toLowerCase();
+    const remaining = [];
+    for (const waiter of list) {
+      if (waiter.targetStatus.toLowerCase() === current) {
+        clearTimeout(waiter.timer);
+        waiter.resolve(current);
+      } else {
+        remaining.push(waiter);
+      }
+    }
+    if (remaining.length > 0) {
+      statusWaiters.set(botId, remaining);
+    } else {
+      statusWaiters.delete(botId);
+    }
+  }
+
+  function waitForBotStatus(botId, targetStatus, timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+      const cached = botsCache.find(b => b.id === botId);
+      if (cached && (cached.status || '').toLowerCase() === targetStatus.toLowerCase()) {
+        return resolve(cached.status);
+      }
+
+      let pollInterval = null;
+      let waiterObj = null;
+
+      const timer = setTimeout(() => {
+        if (pollInterval) clearInterval(pollInterval);
+        const list = statusWaiters.get(botId) || [];
+        statusWaiters.set(botId, list.filter(w => w !== waiterObj));
+        reject(new Error(`Timeout waiting for bot status '${targetStatus}'`));
+      }, timeoutMs);
+
+      waiterObj = {
+        targetStatus,
+        resolve: (val) => {
+          if (pollInterval) clearInterval(pollInterval);
+          resolve(val);
+        },
+        reject: (err) => {
+          if (pollInterval) clearInterval(pollInterval);
+          reject(err);
+        },
+        timer
+      };
+
+      const list = statusWaiters.get(botId) || [];
+      list.push(waiterObj);
+      statusWaiters.set(botId, list);
+
+      // Actively poll /api/bots in case of delayed WebSocket event
+      pollInterval = setInterval(async () => {
+        if (!statusWaiters.has(botId)) {
+          clearInterval(pollInterval);
+          return;
+        }
+        try {
+          const bots = await apiFetch('/api/bots');
+          const b = bots.find(x => x.id === botId);
+          if (b && (b.status || '').toLowerCase() === targetStatus.toLowerCase()) {
+            clearInterval(pollInterval);
+            notifyStatusWaiters(botId, b.status);
+          }
+        } catch (e) {}
+      }, 500);
+    });
+  }
+
+  function runBotProgressAnimation(botId, options = {}) {
+    const card = document.querySelector(`.bot-card[data-bot-id="${botId}"]`);
+    if (!card) return null;
+
+    activeLoadingBots.add(botId);
+
+    const inner = card.closest('.beam-card-inner') || card.parentElement;
+
+    // Blur card
+    card.classList.add('bot-card-blurred');
+
+    // Remove any leftover overlay
+    const oldOverlay = inner.querySelector('.bot-loading-overlay');
+    if (oldOverlay) oldOverlay.remove();
+
+    const titleText = options.title || 'STARTING BOT';
+    const subText = options.initialSub || 'Initializing environment...';
+    const iconHtml = options.icon || '<i class="fas fa-play"></i>';
+    const targetWait = options.targetWaitPercent || 92;
+    const circumference = 301.6; // 2 * PI * 48
+
+    const overlay = document.createElement('div');
+    overlay.className = 'bot-loading-overlay';
+    overlay.id = `loading-overlay-${botId}`;
+    overlay.innerHTML = `
+      <div class="circular-progress-box" id="circle-box-${botId}">
+        <div class="ring-ambient-glow"></div>
+        <svg width="124" height="124" viewBox="0 0 124 124">
+          <defs>
+            <linearGradient id="purpleRingGrad-${botId}" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#f0abfc" />
+              <stop offset="40%" stop-color="#c084fc" />
+              <stop offset="80%" stop-color="#8b5cf6" />
+              <stop offset="100%" stop-color="#06b6d4" />
+            </linearGradient>
+            <filter id="purpleGlowFilter-${botId}" x="-25%" y="-25%" width="150%" height="150%">
+              <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#a855f7" flood-opacity="0.9" />
+              <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#8b5cf6" flood-opacity="0.6" />
+            </filter>
+          </defs>
+          <circle class="ring-bg" cx="62" cy="62" r="48" />
+          <circle class="ring-progress" id="ring-circle-${botId}" cx="62" cy="62" r="48"
+                  stroke="url(#purpleRingGrad-${botId})"
+                  filter="url(#purpleGlowFilter-${botId})"
+                  style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${circumference};" />
+        </svg>
+        <div class="ring-center-content">
+          <div class="ring-icon-wrap" id="ring-icon-${botId}">${iconHtml}</div>
+          <div class="ring-percent" id="ring-percent-${botId}">0%</div>
+        </div>
+      </div>
+      <div class="ring-status-title" id="ring-title-${botId}">${titleText}</div>
+      <div class="ring-status-sub" id="ring-sub-${botId}">${subText}</div>
+    `;
+
+    inner.appendChild(overlay);
+
+    // Trigger entrance transition
+    requestAnimationFrame(() => overlay.classList.add('active'));
+
+    const ringCircle = overlay.querySelector(`#ring-circle-${botId}`);
+    const percentEl = overlay.querySelector(`#ring-percent-${botId}`);
+    const titleEl = overlay.querySelector(`#ring-title-${botId}`);
+    const subEl = overlay.querySelector(`#ring-sub-${botId}`);
+    const iconWrap = overlay.querySelector(`#ring-icon-${botId}`);
+    const circleBox = overlay.querySelector(`#circle-box-${botId}`);
+
+    let currentPercent = 0;
+    let isFinished = false;
+
+    // Smooth ease-in progress towards targetWait (holds at 92-94% until verified)
+    const interval = setInterval(() => {
+      if (isFinished) {
+        clearInterval(interval);
+        return;
+      }
+
+      if (currentPercent < targetWait) {
+        const remaining = targetWait - currentPercent;
+        const step = Math.max(0.6, remaining * 0.08);
+        currentPercent = Math.min(targetWait, currentPercent + step);
+
+        if (percentEl) percentEl.textContent = `${Math.round(currentPercent)}%`;
+        if (ringCircle) {
+          const offset = circumference * (1 - currentPercent / 100);
+          ringCircle.style.strokeDashoffset = offset;
+        }
+
+        if (options.action === 'start') {
+          if (currentPercent >= 15 && currentPercent < 40) {
+            if (subEl) subEl.textContent = 'Verifying runtime & packages...';
+          } else if (currentPercent >= 40 && currentPercent < 70) {
+            if (subEl) subEl.textContent = 'Spawning bot process...';
+          } else if (currentPercent >= 70) {
+            if (subEl) subEl.textContent = 'Awaiting online handshake...';
+          }
+        } else if (options.action === 'stop') {
+          if (currentPercent >= 20 && currentPercent < 55) {
+            if (subEl) subEl.textContent = 'Sending SIGINT/SIGTERM...';
+          } else if (currentPercent >= 55) {
+            if (subEl) subEl.textContent = 'Terminating child threads...';
+          }
+        }
+      }
+    }, 45);
+
+    return {
+      complete: (opts = {}) => {
+        return new Promise((resolve) => {
+          isFinished = true;
+          clearInterval(interval);
+
+          let p = currentPercent;
+          const sprintInterval = setInterval(() => {
+            p += (100 - p) * 0.35 + 1.5;
+            if (p >= 99.5) {
+              p = 100;
+              clearInterval(sprintInterval);
+
+              if (percentEl) percentEl.textContent = '100%';
+              if (ringCircle) ringCircle.style.strokeDashoffset = '0';
+              if (iconWrap) {
+                iconWrap.innerHTML = opts.icon || '<i class="fas fa-check"></i>';
+                iconWrap.style.color = '#34d399';
+                iconWrap.style.transform = 'scale(1.25)';
+              }
+              if (titleEl) {
+                titleEl.textContent = opts.title || 'READY';
+                titleEl.style.color = '#34d399';
+              }
+              if (subEl) {
+                subEl.textContent = opts.sub || 'Operation complete!';
+                subEl.style.color = '#a7f3d0';
+              }
+              if (circleBox) circleBox.classList.add('ring-success-pulse');
+
+              // Hold on 100% for 650ms so user can enjoy the 100% completion
+              setTimeout(() => {
+                overlay.classList.add('fade-out');
+                card.classList.remove('bot-card-blurred');
+
+                setTimeout(() => {
+                  overlay.remove();
+                  activeLoadingBots.delete(botId);
+                  resolve();
+                }, 350);
+              }, 650);
+            } else {
+              if (percentEl) percentEl.textContent = `${Math.round(p)}%`;
+              if (ringCircle) {
+                ringCircle.style.strokeDashoffset = circumference * (1 - p / 100);
+              }
+            }
+          }, 30);
+        });
+      },
+
+      fail: (errMsg) => {
+        isFinished = true;
+        clearInterval(interval);
+
+        if (percentEl) {
+          percentEl.textContent = '!';
+          percentEl.style.color = '#f87171';
+        }
+        if (iconWrap) {
+          iconWrap.innerHTML = '<i class="fas fa-triangle-exclamation"></i>';
+          iconWrap.style.color = '#f87171';
+        }
+        if (titleEl) {
+          titleEl.textContent = 'FAILED';
+          titleEl.style.color = '#f87171';
+        }
+        if (subEl) {
+          subEl.textContent = errMsg || 'Operation failed';
+          subEl.style.color = '#fca5a5';
+        }
+        if (ringCircle) {
+          ringCircle.style.stroke = '#ef4444';
+        }
+
+        setTimeout(() => {
+          overlay.classList.add('fade-out');
+          card.classList.remove('bot-card-blurred');
+          setTimeout(() => {
+            overlay.remove();
+            activeLoadingBots.delete(botId);
+          }, 350);
+        }, 1600);
+      }
+    };
+  }
 
   async function startBot(botId) {
+    const anim = runBotProgressAnimation(botId, {
+      action: 'start',
+      title: 'STARTING BOT',
+      initialSub: 'Initializing environment...',
+      icon: '<i class="fas fa-play"></i>',
+      targetWaitPercent: 92
+    });
+
     try {
       await apiFetch(`/api/bots/${botId}/start`, { method: 'POST' });
+      await waitForBotStatus(botId, 'running', 15000);
+
+      if (anim) {
+        await anim.complete({
+          title: 'BOT ONLINE',
+          sub: 'Process active & operational',
+          icon: '<i class="fas fa-check"></i>'
+        });
+      }
       showToast('Bot started successfully', 'success');
       await refreshDashboard();
     } catch (err) {
+      if (anim) anim.fail(err.message || 'Failed to start bot');
       showToast(err.message || 'Failed to start bot', 'error');
     }
   }
 
   async function stopBot(botId) {
+    const anim = runBotProgressAnimation(botId, {
+      action: 'stop',
+      title: 'STOPPING BOT',
+      initialSub: 'Sending shutdown signal...',
+      icon: '<i class="fas fa-stop"></i>',
+      targetWaitPercent: 88
+    });
+
     try {
       await apiFetch(`/api/bots/${botId}/stop`, { method: 'POST' });
+      await waitForBotStatus(botId, 'stopped', 12000);
+
+      if (anim) {
+        await anim.complete({
+          title: 'BOT STOPPED',
+          sub: 'Process terminated cleanly',
+          icon: '<i class="fas fa-check"></i>'
+        });
+      }
       showToast('Bot stopped', 'info');
       await refreshDashboard();
     } catch (err) {
+      if (anim) anim.fail(err.message || 'Failed to stop bot');
       showToast(err.message || 'Failed to stop bot', 'error');
     }
   }
 
   async function restartBot(botId) {
+    const anim = runBotProgressAnimation(botId, {
+      action: 'restart',
+      title: 'RESTARTING BOT',
+      initialSub: 'Rebooting process...',
+      icon: '<i class="fas fa-rotate"></i>',
+      targetWaitPercent: 90
+    });
+
     try {
       await apiFetch(`/api/bots/${botId}/restart`, { method: 'POST' });
+      await waitForBotStatus(botId, 'running', 15000);
+
+      if (anim) {
+        await anim.complete({
+          title: 'BOT RESTARTED',
+          sub: 'System reboot complete',
+          icon: '<i class="fas fa-check"></i>'
+        });
+      }
       showToast('Bot restarted', 'success');
       await refreshDashboard();
     } catch (err) {
+      if (anim) anim.fail(err.message || 'Failed to restart bot');
       showToast(err.message || 'Failed to restart bot', 'error');
     }
   }
@@ -1052,6 +1377,9 @@
    * Update a bot's status in the UI without full re-render.
    */
   function updateBotStatus(botId, status) {
+    // Notify any pending circular animation waiters immediately
+    notifyStatusWaiters(botId, status);
+
     // Update cached bot data
     const cachedBot = botsCache.find(b => b.id === botId);
     if (cachedBot) cachedBot.status = status;
@@ -1074,9 +1402,9 @@
         const startBtn = actions.querySelector('[data-action="start"]');
         const stopBtn = actions.querySelector('[data-action="stop"]');
         if (isStopped && stopBtn) {
-          stopBtn.outerHTML = `<button class="btn btn-success btn-sm" data-action="start" data-bot-id="${botId}" title="Start">▶ Start</button>`;
+          stopBtn.outerHTML = `<button class="btn btn-success btn-sm" data-action="start" data-bot-id="${botId}" title="Start Bot"><i class="fas fa-play"></i> Start</button>`;
         } else if (!isStopped && startBtn) {
-          startBtn.outerHTML = `<button class="btn btn-warning btn-sm" data-action="stop" data-bot-id="${botId}" title="Stop">⏹ Stop</button>`;
+          startBtn.outerHTML = `<button class="btn btn-warning btn-sm" data-action="stop" data-bot-id="${botId}" title="Stop Bot"><i class="fas fa-stop"></i> Stop</button>`;
         }
         // Enable/disable restart
         const restartBtn = actions.querySelector('[data-action="restart"]');

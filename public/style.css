@@ -3077,3 +3077,171 @@ body {
   0% { transform: scale(1); opacity: 0.9; }
   100% { transform: scale(2.8); opacity: 0; }
 }
+
+/* ============================================
+   BOT CARD BLUR & CIRCULAR PROGRESS OVERLAY
+   ============================================ */
+
+/* Blurred state for bot card when Start/Stop is active */
+.bot-card.bot-card-blurred {
+  filter: blur(8px) brightness(0.45);
+  pointer-events: none;
+  user-select: none;
+  transition: filter 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glassmorphic Loading Overlay centered over the card */
+.bot-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 7, 24, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: inherit;
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: auto;
+}
+
+.bot-loading-overlay.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.bot-loading-overlay.fade-out {
+  opacity: 0;
+  transform: scale(1.05);
+  pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+/* Circular Progress Box */
+.circular-progress-box {
+  position: relative;
+  width: 124px;
+  height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.circular-progress-box svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg); /* Start from top (12 o'clock) */
+}
+
+.circular-progress-box .ring-bg {
+  fill: none;
+  stroke: rgba(139, 92, 246, 0.16);
+  stroke-width: 7;
+}
+
+.circular-progress-box .ring-progress {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: stroke-dashoffset;
+}
+
+/* Ambient Purple Glow Orb behind the circle */
+.ring-ambient-glow {
+  position: absolute;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.4) 0%, rgba(139, 92, 246, 0.15) 50%, transparent 75%);
+  animation: ambientRingPulse 2s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes ambientRingPulse {
+  0% { transform: scale(0.88); opacity: 0.5; }
+  100% { transform: scale(1.18); opacity: 0.95; }
+}
+
+/* Centered content inside the circular ring */
+.ring-center-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  user-select: none;
+}
+
+.ring-icon-wrap {
+  font-size: 17px;
+  color: var(--accent-purple-light);
+  margin-bottom: 2px;
+  filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.9));
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ring-percent {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #ffffff 30%, #d8b4fe 70%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.65));
+  transition: all 0.2s;
+}
+
+/* Status Labels below the circular ring */
+.ring-status-title {
+  margin-top: 14px;
+  font-family: var(--font-heading);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #e9d5ff;
+  text-shadow: 0 0 12px rgba(168, 85, 247, 0.7);
+  transition: all 0.3s;
+  text-align: center;
+}
+
+.ring-status-sub {
+  margin-top: 5px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+  text-align: center;
+  max-width: 220px;
+  line-height: 1.35;
+  transition: all 0.3s;
+}
+
+/* Success Burst Pulse when hitting 100% */
+.ring-success-pulse {
+  animation: ringSuccessBurst 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes ringSuccessBurst {
+  0% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(168, 85, 247, 0)); }
+  40% { transform: scale(1.12); filter: drop-shadow(0 0 25px rgba(168, 85, 247, 1)) drop-shadow(0 0 35px rgba(6, 182, 212, 0.8)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.8)); }
+}
+
+/* Button tactile active feel */
+.btn-success:active, .btn-warning:active, .btn-info:active {
+  transform: scale(0.94);
+}
+
