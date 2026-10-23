@@ -112,7 +112,9 @@ if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 function loadBots() {
     try {
         if (fs.existsSync(BOTS_JSON)) {
-            return JSON.parse(fs.readFileSync(BOTS_JSON, 'utf-8'));
+            let raw = fs.readFileSync(BOTS_JSON, 'utf-8');
+            if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
+            return JSON.parse(raw);
         }
     } catch { /* corrupted file — start fresh */ }
     return [];
