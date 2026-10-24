@@ -607,6 +607,79 @@ const upload = multer({
     }
 });
 
+// ─── Real-time System & Process Telemetry ─────────────────────────────────────
+let currentCpuUsage = 0;
+let lastCpuSample = null;
+
+function sampleCpu() {
+    try {
+        const cpus = os.cpus();
+        let totalIdle = 0, totalTick = 0;
+        for (const cpu of cpus) {
+            for (const type in cpu.times) totalTick += cpu.times[type];
+            totalIdle += cpu.times.idle;
+        }
+        if (lastCpuSample) {
+            const idleDiff = totalIdle - lastCpuSample.totalIdle;
+            const totalDiff = totalTick - lastCpuSample.totalTick;
+            if (totalDiff > 0) {
+                currentCpuUsage = Math.max(0, Math.min(100, Math.round((1 - (idleDiff / totalDiff)) * 100)));
+            }
+        }
+        lastCpuSample = { totalIdle, totalTick };
+    } catch(e) {}
+}
+sampleCpu();
+setInterval(sampleCpu, 1500);
+
+function getBotTelemetry(botId) {
+    const child = processes.get(botId);
+    if (!child || !child.pid) return { memoryMB: 0, cpuPercent: 0 };
+    
+    let memoryMB = 0;
+    let cpuPercent = 0;
+    const pid = child.pid;
+    
+    if (process.platform === 'linux') {
+        try {
+            const pids = [pid];
+            try {
+                const childPids = execSync(`pgrep -P ${pid}`, { encoding: 'utf8' }).trim().split('\n');
+                for (const cp of childPids) {
+                    const cpid = parseInt(cp.trim(), 10);
+                    if (cpid && !isNaN(cpid)) pids.push(cpid);
+                }
+            } catch(e) {}
+
+            let totalKb = 0;
+            for (const p of pids) {
+                try {
+                    const status = fs.readFileSync(`/proc/${p}/status`, 'utf8');
+                    const match = status.match(/VmRSS:\s+(\d+)\s+kB/i);
+                    if (match) totalKb += parseInt(match[1], 10);
+                } catch(e) {}
+            }
+            memoryMB = Math.round(totalKb / 1024);
+        } catch(e) {}
+
+        try {
+            const ps = execSync(`ps -o %cpu= -p ${pid}`, { encoding: 'utf8' }).trim();
+            cpuPercent = Math.round((parseFloat(ps) || 0) * 10) / 10;
+        } catch(e) {}
+    } else if (process.platform === 'win32') {
+        try {
+            const out = execSync(`tasklist /fi "PID eq ${pid}" /fo csv /nh`, { encoding: 'utf8' });
+            const match = out.match(/"[\d,]+\s*K"/i);
+            if (match) {
+                const kb = parseInt(match[0].replace(/[^\d]/g, ''), 10);
+                memoryMB = Math.round(kb / 1024);
+            }
+        } catch(e) {}
+    }
+
+    return { memoryMB, cpuPercent };
+}
+
 // ─── GET /api/system ─────────────────────────────────────────────────────────
 app.get('/api/system', (_req, res) => {
     try {
@@ -691,26 +764,8 @@ app.get('/api/system', (_req, res) => {
             }
         } catch(e) {}
         
-        // Accurate CPU Usage for container apps
-        let cpuUsage = 0;
-        try {
-            if (process.platform === 'linux') {
-                const psOutput = execSync("ps -eo pcpu,command | grep -E 'node|python' | grep -v grep", { encoding: 'utf8' });
-                const lines = psOutput.trim().split('\\n');
-                lines.forEach(line => {
-                    const match = line.trim().match(/^([0-9.]+)/);
-                    if (match) {
-                        cpuUsage += parseFloat(match[1]);
-                    }
-                });
-                cpuUsage = Math.round(cpuUsage);
-            } else {
-                cpuUsage = Math.round(os.loadavg()[0] * 100 / os.cpus().length) || 0;
-            }
-        } catch(e) {
-            cpuUsage = Math.round(os.loadavg()[0] * 100 / os.cpus().length) || 0;
-        }
-        if (cpuUsage > 100) cpuUsage = 100;
+        // Real sampled CPU usage
+        const cpuUsage = currentCpuUsage;
         
         res.json({
             platform: `${os.type()} ${os.arch()}`,
@@ -737,7 +792,19 @@ app.get('/api/bots', (_req, res) => {
         if (b.status === 'running' && b.uptimeStart) {
             uptime += Date.now() - new Date(b.uptimeStart).getTime();
         }
-        return { ...b, uptimeFormatted: formatUptime(uptime) };
+
+        let telemetry = { memoryMB: 0, cpuPercent: 0 };
+        if (b.status === 'running') {
+            telemetry = getBotTelemetry(b.id);
+        }
+
+        return {
+            ...b,
+            uptimeFormatted: formatUptime(uptime),
+            memoryMB: telemetry.memoryMB,
+            cpuPercent: telemetry.cpuPercent,
+            memoryLimitMB: 512
+        };
     });
     res.json(result);
 });

@@ -327,34 +327,140 @@
   }
 
   /**
-   * Lightweight refresh – only updates stats and bot statuses without
-   * re-rendering the entire card grid (avoids flashing).
+  function updateSystemInfoUI(sys) {
+    if (!sys) return;
+    const el = (id) => document.getElementById(id);
+
+    if (el('sys-platform')) el('sys-platform').textContent = sys.platform;
+    if (el('sys-node-version')) el('sys-node-version').textContent = sys.nodeVersion;
+    if (el('sys-python-version')) el('sys-python-version').textContent = sys.pythonVersion;
+
+    if (el('sys-cpu-bar')) el('sys-cpu-bar').style.width = `${sys.cpuUsage}%`;
+    if (el('sys-cpu-text')) el('sys-cpu-text').textContent = `${sys.cpuUsage}%`;
+
+    if (el('sys-mem-bar')) el('sys-mem-bar').style.width = `${sys.memory.percentage}%`;
+    if (el('sys-mem-text')) el('sys-mem-text').textContent = `${sys.memory.percentage}% (${sys.memory.usedGB} GB / ${sys.memory.totalGB} GB)`;
+
+    if (el('sys-disk-bar') && sys.disk) {
+      el('sys-disk-bar').style.width = `${sys.disk.percentage}%`;
+      if (el('sys-disk-text')) el('sys-disk-text').textContent = `${sys.disk.percentage}% (${sys.disk.usedGB} GB / ${sys.disk.totalGB} GB)`;
+    }
+
+    if (el('admin-uptime')) {
+      const days = Math.floor(sys.uptime / 86400);
+      const hours = Math.floor((sys.uptime % 86400) / 3600);
+      const mins = Math.floor((sys.uptime % 3600) / 60);
+      el('admin-uptime').textContent = `${days}d ${hours}h ${mins}m`;
+    }
+  }
+
+  function updateBotCardsInPlace(bots) {
+    const container = $('#bots-container');
+    if (!container) return false;
+
+    const existingCards = $$('.bot-card[data-bot-id]', container);
+    if (existingCards.length === 0 && bots.length > 0) return false;
+    if (existingCards.length !== bots.length) return false;
+
+    const existingIds = existingCards.map(c => c.dataset.botId);
+    const newIds = bots.map(b => b.id);
+    if (!newIds.every(id => existingIds.includes(id))) return false;
+
+    bots.forEach(bot => {
+      const card = container.querySelector(`.bot-card[data-bot-id="${bot.id}"]`);
+      if (!card) return;
+
+      const isRunning = (bot.status || '').toUpperCase() === 'RUNNING';
+      const isStopped = (bot.status || '').toUpperCase() === 'STOPPED';
+
+      // Status badge
+      const statusBadge = card.querySelector('.status-badge');
+      if (statusBadge) {
+        statusBadge.className = `status-badge ${statusClass(bot.status)}`;
+        statusBadge.innerHTML = `<span class="status-dot">${statusIcon(bot.status)}</span> ${(bot.status || 'STOPPED').toUpperCase()}`;
+      }
+
+      // Uptime
+      const uptimeEl = card.querySelector('.bot-uptime');
+      if (uptimeEl) {
+        uptimeEl.dataset.uptimeStart = bot.uptimeStart || '';
+        uptimeEl.textContent = isRunning ? formatUptime(bot.uptimeStart) : '—';
+      }
+
+      // Restarts
+      const infoValues = card.querySelectorAll('.bot-info-row .info-value');
+      if (infoValues.length >= 3) {
+        infoValues[2].textContent = bot.restarts || 0;
+      }
+
+      // Real RAM & CPU
+      const memLimit = bot.memoryLimitMB || 512;
+      const memUsed = isRunning ? (bot.memoryMB || 0) : 0;
+      const memPercent = isRunning ? Math.min(100, Math.round((memUsed / memLimit) * 100)) : 0;
+      const cpuUsed = isRunning ? (bot.cpuPercent || 0) : 0;
+
+      const memText = card.querySelector('.bot-mem-text');
+      if (memText) memText.textContent = isRunning ? `${memUsed} MB / ${memLimit} MB` : 'Inactive';
+
+      const cpuText = card.querySelector('.bot-cpu-text');
+      if (cpuText) cpuText.textContent = isRunning ? `${cpuUsed}%` : '0%';
+
+      const meterFill = card.querySelector('.bot-meter-fill');
+      if (meterFill) meterFill.style.width = `${isRunning ? memPercent : 0}%`;
+
+      // Update start / stop button state smoothly
+      const actionsDiv = card.querySelector('.bot-card-actions');
+      if (actionsDiv) {
+        const startBtn = actionsDiv.querySelector('[data-action="start"]');
+        const stopBtn = actionsDiv.querySelector('[data-action="stop"]');
+        const restartBtn = actionsDiv.querySelector('[data-action="restart"]');
+
+        if (isStopped && stopBtn) {
+          stopBtn.outerHTML = `<button class="btn btn-success btn-sm" data-action="start" data-bot-id="${bot.id}" title="Start Bot"><i class="fas fa-play"></i> Start</button>`;
+          if (restartBtn) restartBtn.disabled = true;
+        } else if (isRunning && startBtn) {
+          startBtn.outerHTML = `<button class="btn btn-warning btn-sm" data-action="stop" data-bot-id="${bot.id}" title="Stop Bot"><i class="fas fa-stop"></i> Stop</button>`;
+          if (restartBtn) restartBtn.disabled = false;
+        }
+      }
+    });
+
+    return true;
+  }
+
+  /**
+   * Real-time 2-second refresh for telemetry, stats, and system info
    */
   async function refreshDashboard() {
-    // Only refresh if we are on the dashboard page
-    const dashboardPage = $('#page-dashboard');
-    if (!dashboardPage || dashboardPage.style.display === 'none') return;
-
     try {
-      const [stats, bots] = await Promise.all([
+      const [stats, bots, sys] = await Promise.all([
         apiFetch('/api/stats'),
         apiFetch('/api/bots'),
+        apiFetch('/api/system').catch(() => null)
       ]);
 
       botsCache = bots;
 
-      // Update stat numbers directly (no animation on refresh)
+      // Update stat counters
       setCounterValue($('#stat-total'), stats.totalBots || 0);
       setCounterValue($('#stat-running'), stats.running || 0);
       setCounterValue($('#stat-pending'), stats.pending || 0);
       setCounterValue($('#stat-stopped'), stats.stopped || 0);
 
-      // Re-render cards only if no bot is currently running an animation
+      // Real-time System Information bar update
+      if (sys) {
+        updateSystemInfoUI(sys);
+      }
+
+      // Real-time Bot Cards update in-place without blinking
       if (!activeLoadingBots || activeLoadingBots.size === 0) {
-        renderBotCards(bots);
+        const inPlaceUpdated = updateBotCardsInPlace(bots);
+        if (!inPlaceUpdated) {
+          renderBotCards(bots);
+        }
       }
     } catch (err) {
-      console.error('Dashboard refresh failed:', err);
+      console.error('Real-time telemetry refresh failed:', err);
     }
   }
 
@@ -455,9 +561,11 @@
     const isStopped = (bot.status || '').toUpperCase() === 'STOPPED';
     const delay = index * 0.05;
 
-    // Simulated RAM calculation based on file size and restarts
-    const ramEstimate = isRunning ? Math.min(256, Math.max(38, Math.round(((bot.fileSize || 50000) / 1024 / 20) + 35))) : 0;
-    const ramPercent = Math.min(100, Math.round((ramEstimate / 256) * 100));
+    // 100% Real OS process telemetry from server
+    const memLimit = bot.memoryLimitMB || 512;
+    const memUsed = isRunning ? (bot.memoryMB || 0) : 0;
+    const memPercent = isRunning ? Math.min(100, Math.round((memUsed / memLimit) * 100)) : 0;
+    const cpuUsed = isRunning ? (bot.cpuPercent || 0) : 0;
 
     return `
       <div class="beam-card-wrapper bot-card-beam" style="animation-delay: ${delay}s">
@@ -494,14 +602,14 @@
                 <span class="info-value">${bot.restarts || 0}</span>
               </div>
 
-              <!-- Resource Telemetry Meter -->
+              <!-- Resource Telemetry Meter (100% Real-Time) -->
               <div class="bot-meter-row">
                 <div class="bot-meter-header">
-                  <span><i class="fas fa-microchip"></i> Memory</span>
-                  <span>${isRunning ? `${ramEstimate} MB / 256 MB` : 'Inactive'}</span>
+                  <span><i class="fas fa-microchip"></i> Memory: <strong class="bot-mem-text">${isRunning ? `${memUsed} MB / ${memLimit} MB` : 'Inactive'}</strong></span>
+                  <span><i class="fas fa-bolt" style="color:var(--accent-cyan);margin-left:8px;"></i> CPU: <strong class="bot-cpu-text">${isRunning ? `${cpuUsed}%` : '0%'}</strong></span>
                 </div>
                 <div class="bot-meter-track">
-                  <div class="bot-meter-fill" style="width: ${isRunning ? ramPercent : 0}%"></div>
+                  <div class="bot-meter-fill" style="width: ${isRunning ? memPercent : 0}%"></div>
                 </div>
               </div>
             </div>
@@ -1440,36 +1548,9 @@
   // ─── Admin ─────────────────────────────────────────────────────────────────
 
   async function loadAdmin() {
-    // Placeholder – extend as needed for admin features
     try {
-      const stats = await apiFetch('/api/stats');
       const sys = await apiFetch('/api/system');
-      
-      const el = (id) => document.getElementById(id);
-      
-      if(sys) {
-          if(el('sys-platform')) el('sys-platform').textContent = sys.platform;
-          if(el('sys-node-version')) el('sys-node-version').textContent = sys.nodeVersion;
-          if(el('sys-python-version')) el('sys-python-version').textContent = sys.pythonVersion;
-          
-          if(el('sys-cpu-bar')) el('sys-cpu-bar').style.width = `${sys.cpuUsage}%`;
-          if(el('sys-cpu-text')) el('sys-cpu-text').textContent = `${sys.cpuUsage}%`;
-          
-          if(el('sys-mem-bar')) el('sys-mem-bar').style.width = `${sys.memory.percentage}%`;
-          if(el('sys-mem-text')) el('sys-mem-text').textContent = `${sys.memory.percentage}% (${sys.memory.usedGB} GB / ${sys.memory.totalGB} GB)`;
-          
-          if(el('sys-disk-bar') && sys.disk) {
-              el('sys-disk-bar').style.width = `${sys.disk.percentage}%`;
-              if(el('sys-disk-text')) el('sys-disk-text').textContent = `${sys.disk.percentage}% (${sys.disk.usedGB} GB / ${sys.disk.totalGB} GB)`;
-          }
-          
-          if(el('admin-uptime')) {
-              const days = Math.floor(sys.uptime / 86400);
-              const hours = Math.floor((sys.uptime % 86400) / 3600);
-              const mins = Math.floor((sys.uptime % 3600) / 60);
-              el('admin-uptime').textContent = `${days}d ${hours}h ${mins}m`;
-          }
-      }
+      if (sys) updateSystemInfoUI(sys);
     } catch (err) {
       console.error('Failed to load admin data:', err);
     }
@@ -2008,7 +2089,7 @@
     init3DTilt();
     loadDashboard();
 
-    // Auto-refresh dashboard every 10 seconds
-    dashboardRefreshId = setInterval(refreshDashboard, 10000);
+    // Real-time auto-refresh dashboard and telemetry every 2 seconds
+    dashboardRefreshId = setInterval(refreshDashboard, 2000);
   });
 })();

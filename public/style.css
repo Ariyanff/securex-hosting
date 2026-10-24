@@ -3056,6 +3056,18 @@ body {
   transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.bot-mem-text {
+  color: #c084fc;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.bot-cpu-text {
+  color: #06b6d4;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
 /* Pulsing radar sonar on running status badge */
 .status-badge.status-running {
   position: relative;
