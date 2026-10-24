@@ -432,6 +432,7 @@ async function startBot(bot) {
 
     processes.set(bot.id, child);
     bot.status = 'running';
+    bot.autoRestart = true;
     bot.uptimeStart = new Date().toISOString();
     saveBots();
     broadcastStatus(bot.id, 'running');
@@ -465,14 +466,27 @@ async function startBot(bot) {
         saveBots();
         broadcastStatus(bot.id, 'stopped');
         processes.delete(bot.id);
+
+        // Auto-recover if crashed or closed unexpectedly (not user-stopped)
+        if (bot.autoRestart && !stoppingBots.has(bot.id)) {
+            addLog(bot.id, `[SENPAI] 🔄 Process exited unexpectedly. Auto-restarting in 5s ...`);
+            setTimeout(() => {
+                if (bot.autoRestart && !processes.has(bot.id)) {
+                    startBot(bot).catch(err => addLog(bot.id, `[SENPAI] Auto-restart error: ${err.message}`));
+                }
+            }, 5000);
+        }
     });
 }
 
 // ─── Stop a bot process ──────────────────────────────────────────────────────
 const stoppingBots = new Set();
 
-function stopBot(bot) {
+function stopBot(bot, manual = false) {
     return new Promise((resolve) => {
+        if (manual) {
+            bot.autoRestart = false;
+        }
         // Prevent duplicate stop calls
         if (stoppingBots.has(bot.id)) return resolve();
         stoppingBots.add(bot.id);
@@ -856,7 +870,7 @@ app.post('/api/bots/:id/stop', async (req, res) => {
         if (!bot) return res.status(404).json({ error: 'Bot not found' });
         if (bot.status === 'stopped' && !processes.has(bot.id)) return res.status(400).json({ error: 'Bot is already stopped' });
 
-        await stopBot(bot);
+        await stopBot(bot, true);
         res.json({ success: true, message: 'Bot stopped' });
     } catch (err) {
         console.error('[SENPAI] Stop error:', err);
@@ -897,7 +911,7 @@ app.delete('/api/bots/:id', async (req, res) => {
 
         // Stop if running
         if (bot.status === 'running' || processes.has(bot.id)) {
-            await stopBot(bot);
+            await stopBot(bot, true);
         }
 
         // Delete directory
@@ -1199,7 +1213,7 @@ server.listen(PORT, '0.0.0.0', () => {
 
     // Auto-resume bots that were running before server reboot
     for (const b of bots) {
-        if (b.status === 'running') {
+        if (b.autoRestart === true || b.status === 'running') {
             console.log(`[SecureX] Auto-resuming bot: ${b.name} (${b.id})`);
             startBot(b).catch(err => console.error(`[SecureX] Auto-resume error for ${b.name}:`, err.message));
         }
