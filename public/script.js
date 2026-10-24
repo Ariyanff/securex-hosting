@@ -1046,7 +1046,10 @@
     activeLoadingBots.add(botId);
     cardWrapper.classList.add('is-deleting');
 
-    // Create 3D Cyber Purge HUD Overlay
+    const card = cardWrapper.querySelector('.bot-card') || cardWrapper;
+    const cardInner = cardWrapper.querySelector('.beam-card-inner') || card;
+
+    // 1. Create 3D Cyber Purge HUD Overlay
     const overlay = document.createElement('div');
     overlay.className = 'purge-overlay-3d';
     overlay.innerHTML = `
@@ -1061,12 +1064,28 @@
           <div class="purge-percent-val">0%</div>
         </div>
       </div>
-      <div class="purge-status-title">PURGING BOT TARGET</div>
-      <div class="purge-status-sub">Vaporizing memory & files...</div>
+      <div class="purge-status-title">LOCKING TARGET: ${escapeHtml(botName)}</div>
+      <div class="purge-status-sub">Charging 3D disintegration beam...</div>
     `;
-
-    const cardInner = cardWrapper.querySelector('.beam-card-inner') || cardWrapper;
     cardInner.appendChild(overlay);
+
+    // 2. Create Detonation Flash layer
+    const flash = document.createElement('div');
+    flash.className = 'detonation-flash';
+    cardInner.appendChild(flash);
+
+    // 3. Create 3D Particle Canvas
+    const canvas = document.createElement('canvas');
+    canvas.className = 'cyber-purge-canvas';
+    const rect = card.getBoundingClientRect();
+    const cWidth = Math.max(380, Math.round(rect.width * 2.3));
+    const cHeight = Math.max(380, Math.round(rect.height * 2.3));
+    canvas.width = cWidth;
+    canvas.height = cHeight;
+    canvas.style.width = `${cWidth}px`;
+    canvas.style.height = `${cHeight}px`;
+    cardInner.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
 
     const ringMeter = overlay.querySelector('.purge-ring-meter');
     const percentVal = overlay.querySelector('.purge-percent-val');
@@ -1077,59 +1096,178 @@
     // Trigger API delete in parallel
     const deletePromise = apiFetch(`/api/bots/${botId}`, { method: 'DELETE' }).catch(err => ({ error: err.message }));
 
-    // Animate progress 0 -> 100% smoothly
-    const duration = 1200;
+    // Particle 3D System
+    class Particle3D {
+      constructor(ox, oy) {
+        this.x = ox + (Math.random() - 0.5) * 70;
+        this.y = oy + (Math.random() - 0.5) * 60;
+        this.z = (Math.random() - 0.5) * 220; // 3D depth
+
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3.5 + Math.random() * 9.5;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed - (1.5 + Math.random() * 3.5);
+        this.vz = (Math.random() - 0.5) * 9;
+
+        this.gravity = 0.08 + Math.random() * 0.07;
+        this.drag = 0.965;
+        this.size = 2.5 + Math.random() * 4.5;
+        this.alpha = 1;
+        this.decay = 0.009 + Math.random() * 0.013; // Visibly persistent
+
+        const colors = [
+          '#ef4444', '#f87171', '#dc2626', // Crimson red
+          '#c084fc', '#a855f7', '#e879f9', // Cyber purple
+          '#fbbf24', '#f97316', '#ffffff'  // Hot plasma & sparks
+        ];
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+        this.rot = Math.random() * Math.PI * 2;
+        this.rotSpeed = (Math.random() - 0.5) * 0.25;
+        this.isDiamond = Math.random() > 0.45;
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.z += this.vz;
+        this.vy += this.gravity;
+        this.vx *= this.drag;
+        this.vy *= this.drag;
+        this.vz *= this.drag;
+        this.alpha -= this.decay;
+        this.rot += this.rotSpeed;
+        return this.alpha > 0;
+      }
+
+      draw(c, ox, oy) {
+        if (this.alpha <= 0) return;
+        const fov = 350;
+        const scale = Math.max(0.1, fov / (fov + this.z));
+        const px = ox + (this.x - ox) * scale;
+        const py = oy + (this.y - oy) * scale;
+        const pSize = Math.max(1, this.size * scale);
+
+        c.save();
+        c.globalAlpha = Math.max(0, this.alpha);
+        c.shadowBlur = 15 * scale;
+        c.shadowColor = this.color;
+        c.fillStyle = this.color;
+        c.translate(px, py);
+        c.rotate(this.rot);
+
+        if (this.isDiamond) {
+          c.beginPath();
+          c.moveTo(0, -pSize * 1.8);
+          c.lineTo(pSize * 0.7, 0);
+          c.lineTo(0, pSize * 1.8);
+          c.lineTo(-pSize * 0.7, 0);
+          c.closePath();
+          c.fill();
+        } else {
+          c.beginPath();
+          c.arc(0, 0, pSize, 0, Math.PI * 2);
+          c.fill();
+        }
+        c.restore();
+      }
+    }
+
+    let particles = [];
+    let hasExploded = false;
+    const originX = cWidth / 2;
+    const originY = cHeight / 2;
+
+    // Cinematic 2.8s sequence
+    const chargeDuration = 1200; // Phase 1: 0 to 1.2s
+    const totalDuration = 2700;  // Total 2.7s
     const start = performance.now();
 
     await new Promise((resolve) => {
-      function tick(now) {
+      function renderLoop(now) {
         const elapsed = now - start;
-        const p = Math.min(elapsed / duration, 1);
-        const percent = Math.round(p * 100);
+        ctx.clearRect(0, 0, cWidth, cHeight);
 
-        if (percentVal) percentVal.textContent = `${percent}%`;
-        if (ringMeter) ringMeter.style.strokeDashoffset = circ * (1 - p);
+        // Phase 1: Charging Ring (0 to 1.2s)
+        if (elapsed < chargeDuration) {
+          const p = Math.min(elapsed / chargeDuration, 1);
+          const percent = Math.round(p * 100);
 
-        if (percent > 30 && percent <= 65) {
-          if (statusTitle) statusTitle.textContent = 'DISINTEGRATING PROCESS';
-          if (statusSub) statusSub.textContent = 'Terminating socket connections...';
-        } else if (percent > 65) {
-          if (statusTitle) statusTitle.textContent = 'DE-MATERIALIZING 3D';
-          if (statusSub) statusSub.textContent = 'Wiping disk storage...';
+          if (percentVal) percentVal.textContent = `${percent}%`;
+          if (ringMeter) ringMeter.style.strokeDashoffset = circ * (1 - p);
+
+          if (percent > 35 && percent <= 75) {
+            if (statusTitle) statusTitle.textContent = 'CHARGING 3D DISINTEGRATOR';
+            if (statusSub) statusSub.textContent = 'Synthesizing anti-matter pulse...';
+          } else if (percent > 75) {
+            if (statusTitle) statusTitle.textContent = 'CORE DETONATION IMMINENT';
+            if (statusSub) statusSub.textContent = 'Vaporization in 3, 2, 1...';
+          }
+        } 
+        // Phase 2: Detonation & Particle Explosion (at 1.2s)
+        else if (!hasExploded) {
+          hasExploded = true;
+          if (percentVal) percentVal.textContent = `100%`;
+          if (ringMeter) ringMeter.style.strokeDashoffset = 0;
+          if (statusTitle) statusTitle.textContent = '💥 DETONATING PROCESS CORES';
+          if (statusSub) statusSub.textContent = 'Erupting 3D cyber particle blast!';
+
+          // Core flash burst
+          flash.classList.add('flash-active');
+
+          // Spawn 100 3D cyber particles
+          for (let i = 0; i < 110; i++) {
+            particles.push(new Particle3D(originX, originY));
+          }
         }
 
-        if (p < 1) {
-          requestAnimationFrame(tick);
+        // Update and draw particles
+        if (particles.length > 0) {
+          particles = particles.filter(pt => pt.update());
+          for (let pt of particles) {
+            pt.draw(ctx, originX, originY);
+          }
+        }
+
+        // Phase 3: Transition to dematerialized
+        if (elapsed > 2000 && statusTitle) {
+          statusTitle.textContent = 'DE-MATERIALIZING 3D';
+          statusSub.textContent = 'Dispersing virtual particles...';
+        }
+
+        if (elapsed < totalDuration) {
+          requestAnimationFrame(renderLoop);
         } else {
           if (statusTitle) statusTitle.textContent = 'DE-MATERIALIZED';
-          if (statusSub) statusSub.textContent = 'Purge complete.';
+          if (statusSub) statusSub.textContent = 'Purge 100% complete.';
           resolve();
         }
       }
-      requestAnimationFrame(tick);
+      requestAnimationFrame(renderLoop);
     });
 
-    // Check API result
+    // Check API response
     const res = await deletePromise;
     if (res && res.error) {
       showToast(res.error, 'error');
       overlay.remove();
+      flash.remove();
+      canvas.remove();
       cardWrapper.classList.remove('is-deleting');
       activeLoadingBots.delete(botId);
       return;
     }
 
-    // 3D Collapse animation
+    // 4. Smooth collapse of card slot
     cardWrapper.classList.add('collapse-deleted');
-    await new Promise(r => setTimeout(r, 450));
+    await new Promise(r => setTimeout(r, 550));
 
-    // Remove from DOM and local cache
+    // 5. Clean removal & refresh
     cardWrapper.remove();
     activeLoadingBots.delete(botId);
     botsCache = botsCache.filter(b => b.id !== botId);
 
-    showToast(`🗑️ "${botName}" permanently purged from SecureX!`, 'info');
-    // Immediate clean refresh
+    showToast(`💥 "${botName}" 3D vaporized & permanently purged!`, 'info');
+    // Immediate clean reload of dashboard
     await refreshDashboard(true);
   }
 
