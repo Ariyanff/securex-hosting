@@ -429,9 +429,10 @@
   }
 
   /**
-   * Real-time 2-second refresh for telemetry, stats, and system info
+   * Real-time 2-second refresh for telemetry, stats, and system info.
+   * When force=true, performs an instant full re-render of bot cards.
    */
-  async function refreshDashboard() {
+  async function refreshDashboard(force = false) {
     try {
       const [stats, bots, sys] = await Promise.all([
         apiFetch('/api/stats'),
@@ -452,8 +453,10 @@
         updateSystemInfoUI(sys);
       }
 
-      // Real-time Bot Cards update in-place without blinking
-      if (!activeLoadingBots || activeLoadingBots.size === 0) {
+      // Real-time Bot Cards update
+      if (force) {
+        renderBotCards(bots);
+      } else if (!activeLoadingBots || activeLoadingBots.size === 0) {
         const inPlaceUpdated = updateBotCardsInPlace(bots);
         if (!inPlaceUpdated) {
           renderBotCards(bots);
@@ -953,7 +956,7 @@
 
     try {
       await apiFetch(`/api/bots/${botId}/start`, { method: 'POST' });
-      await waitForBotStatus(botId, 'running', 15000);
+      await waitForBotStatus(botId, 'running', 8000);
 
       if (anim) {
         await anim.complete({
@@ -962,11 +965,15 @@
           icon: '<i class="fas fa-check"></i>'
         });
       }
+      activeLoadingBots.delete(botId);
       showToast('Bot started successfully', 'success');
-      await refreshDashboard();
+      // Instant reload of bot cards
+      await refreshDashboard(true);
     } catch (err) {
+      activeLoadingBots.delete(botId);
       if (anim) anim.fail(err.message || 'Failed to start bot');
       showToast(err.message || 'Failed to start bot', 'error');
+      await refreshDashboard(true);
     }
   }
 
@@ -981,7 +988,7 @@
 
     try {
       await apiFetch(`/api/bots/${botId}/stop`, { method: 'POST' });
-      await waitForBotStatus(botId, 'stopped', 12000);
+      await waitForBotStatus(botId, 'stopped', 8000);
 
       if (anim) {
         await anim.complete({
@@ -990,11 +997,15 @@
           icon: '<i class="fas fa-check"></i>'
         });
       }
+      activeLoadingBots.delete(botId);
       showToast('Bot stopped', 'info');
-      await refreshDashboard();
+      // Instant reload of bot cards
+      await refreshDashboard(true);
     } catch (err) {
+      activeLoadingBots.delete(botId);
       if (anim) anim.fail(err.message || 'Failed to stop bot');
       showToast(err.message || 'Failed to stop bot', 'error');
+      await refreshDashboard(true);
     }
   }
 
@@ -1009,7 +1020,7 @@
 
     try {
       await apiFetch(`/api/bots/${botId}/restart`, { method: 'POST' });
-      await waitForBotStatus(botId, 'running', 15000);
+      await waitForBotStatus(botId, 'running', 10000);
 
       if (anim) {
         await anim.complete({
@@ -1018,26 +1029,129 @@
           icon: '<i class="fas fa-check"></i>'
         });
       }
+      activeLoadingBots.delete(botId);
       showToast('Bot restarted', 'success');
-      await refreshDashboard();
+      // Instant reload of bot cards
+      await refreshDashboard(true);
     } catch (err) {
+      activeLoadingBots.delete(botId);
       if (anim) anim.fail(err.message || 'Failed to restart bot');
       showToast(err.message || 'Failed to restart bot', 'error');
+      await refreshDashboard(true);
     }
+  }
+
+  async function runBot3DDeleteAnimation(cardWrapper, botId, botName) {
+    if (!cardWrapper) return;
+    activeLoadingBots.add(botId);
+    cardWrapper.classList.add('is-deleting');
+
+    // Create 3D Cyber Purge HUD Overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'purge-overlay-3d';
+    overlay.innerHTML = `
+      <div class="purge-grid-bg"></div>
+      <div class="purge-hex-wrapper">
+        <svg class="purge-svg-ring" viewBox="0 0 100 100">
+          <circle class="purge-ring-bg" cx="50" cy="50" r="42" />
+          <circle class="purge-ring-meter" cx="50" cy="50" r="42" stroke-dasharray="263.89" stroke-dashoffset="263.89" />
+        </svg>
+        <div class="purge-center-icon">
+          <i class="fas fa-biohazard"></i>
+          <div class="purge-percent-val">0%</div>
+        </div>
+      </div>
+      <div class="purge-status-title">PURGING BOT TARGET</div>
+      <div class="purge-status-sub">Vaporizing memory & files...</div>
+    `;
+
+    const cardInner = cardWrapper.querySelector('.beam-card-inner') || cardWrapper;
+    cardInner.appendChild(overlay);
+
+    const ringMeter = overlay.querySelector('.purge-ring-meter');
+    const percentVal = overlay.querySelector('.purge-percent-val');
+    const statusTitle = overlay.querySelector('.purge-status-title');
+    const statusSub = overlay.querySelector('.purge-status-sub');
+    const circ = 2 * Math.PI * 42; // 263.89
+
+    // Trigger API delete in parallel
+    const deletePromise = apiFetch(`/api/bots/${botId}`, { method: 'DELETE' }).catch(err => ({ error: err.message }));
+
+    // Animate progress 0 -> 100% smoothly
+    const duration = 1200;
+    const start = performance.now();
+
+    await new Promise((resolve) => {
+      function tick(now) {
+        const elapsed = now - start;
+        const p = Math.min(elapsed / duration, 1);
+        const percent = Math.round(p * 100);
+
+        if (percentVal) percentVal.textContent = `${percent}%`;
+        if (ringMeter) ringMeter.style.strokeDashoffset = circ * (1 - p);
+
+        if (percent > 30 && percent <= 65) {
+          if (statusTitle) statusTitle.textContent = 'DISINTEGRATING PROCESS';
+          if (statusSub) statusSub.textContent = 'Terminating socket connections...';
+        } else if (percent > 65) {
+          if (statusTitle) statusTitle.textContent = 'DE-MATERIALIZING 3D';
+          if (statusSub) statusSub.textContent = 'Wiping disk storage...';
+        }
+
+        if (p < 1) {
+          requestAnimationFrame(tick);
+        } else {
+          if (statusTitle) statusTitle.textContent = 'DE-MATERIALIZED';
+          if (statusSub) statusSub.textContent = 'Purge complete.';
+          resolve();
+        }
+      }
+      requestAnimationFrame(tick);
+    });
+
+    // Check API result
+    const res = await deletePromise;
+    if (res && res.error) {
+      showToast(res.error, 'error');
+      overlay.remove();
+      cardWrapper.classList.remove('is-deleting');
+      activeLoadingBots.delete(botId);
+      return;
+    }
+
+    // 3D Collapse animation
+    cardWrapper.classList.add('collapse-deleted');
+    await new Promise(r => setTimeout(r, 450));
+
+    // Remove from DOM and local cache
+    cardWrapper.remove();
+    activeLoadingBots.delete(botId);
+    botsCache = botsCache.filter(b => b.id !== botId);
+
+    showToast(`🗑️ "${botName}" permanently purged from SecureX!`, 'info');
+    // Immediate clean refresh
+    await refreshDashboard(true);
   }
 
   async function deleteBot(botId) {
     const bot = botsCache.find(b => b.id === botId);
     const name = bot ? bot.name : botId;
-    const confirmed = await showConfirmModal(`Are you sure you want to delete "${name}"? This action cannot be undone.`);
+    const confirmed = await showConfirmModal(`Are you sure you want to permanently delete "${name}"? All files and process data will be deleted.`);
     if (!confirmed) return;
 
-    try {
-      await apiFetch(`/api/bots/${botId}`, { method: 'DELETE' });
-      showToast(`${name} deleted`, 'info');
-      await refreshDashboard();
-    } catch (err) {
-      showToast(err.message || 'Failed to delete bot', 'error');
+    const card = $(`.bot-card[data-bot-id="${botId}"]`);
+    const wrapper = card ? card.closest('.beam-card-wrapper') : null;
+
+    if (wrapper) {
+      await runBot3DDeleteAnimation(wrapper, botId, name);
+    } else {
+      try {
+        await apiFetch(`/api/bots/${botId}`, { method: 'DELETE' });
+        showToast(`🗑️ "${name}" deleted`, 'info');
+        await refreshDashboard(true);
+      } catch (err) {
+        showToast(err.message || 'Failed to delete bot', 'error');
+      }
     }
   }
 
@@ -1471,6 +1585,24 @@
 
       case 'status':
         updateBotStatus(data.botId, data.status);
+        if (!activeLoadingBots || !activeLoadingBots.has(data.botId)) {
+          refreshDashboard();
+        }
+        break;
+
+      case 'bot_deleted':
+        botsCache = botsCache.filter(b => b.id !== data.botId);
+        const delCard = $(`.bot-card[data-bot-id="${data.botId}"]`);
+        if (delCard) {
+          const wrapper = delCard.closest('.beam-card-wrapper');
+          if (wrapper) {
+            wrapper.classList.add('collapse-deleted');
+            setTimeout(() => {
+              wrapper.remove();
+              refreshDashboard(true);
+            }, 500);
+          }
+        }
         break;
     }
   }

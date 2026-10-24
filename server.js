@@ -174,12 +174,28 @@ function broadcastLog(botId, entry) {
     }
 }
 
+// Global WebSocket server instance
+let wss = null;
+
 function broadcastStatus(botId, status) {
-    const subs = wsClients.get(botId);
-    if (!subs) return;
     const payload = JSON.stringify({ type: 'status', botId, status });
-    for (const ws of subs) {
-        if (ws.readyState === 1) ws.send(payload);
+    if (wss && wss.clients) {
+        for (const ws of wss.clients) {
+            if (ws.readyState === 1) {
+                try { ws.send(payload); } catch(e) {}
+            }
+        }
+    }
+}
+
+function broadcastBotDeleted(botId) {
+    const payload = JSON.stringify({ type: 'bot_deleted', botId });
+    if (wss && wss.clients) {
+        for (const ws of wss.clients) {
+            if (ws.readyState === 1) {
+                try { ws.send(payload); } catch(e) {}
+            }
+        }
     }
 }
 
@@ -363,10 +379,12 @@ async function startBot(bot) {
     saveBots();
     broadcastStatus(bot.id, 'pending');
 
-    // Auto-install dependencies
+    // Auto-install dependencies (optimized so bots start instantly without re-installing)
     if (isNodeBot) {
-        if (fs.existsSync(path.join(botDir, 'package.json'))) {
-            addLog(bot.id, `[AUTO-INSTALL] Found package.json, running npm install ...`);
+        const hasPackage = fs.existsSync(path.join(botDir, 'package.json'));
+        const hasNodeModules = fs.existsSync(path.join(botDir, 'node_modules'));
+        if (hasPackage && !hasNodeModules) {
+            addLog(bot.id, `[AUTO-INSTALL] Running initial npm install ...`);
             await new Promise((resolve) => {
                 const proc = spawn('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
                     cwd: botDir,
@@ -384,11 +402,13 @@ async function startBot(bot) {
                     resolve();
                 });
             });
-        } else {
-            addLog(bot.id, `[AUTO-INSTALL] No package.json found. Skipping npm install.`);
         }
     } else {
-        await autoInstallDeps(bot.id, botDir, bot.entryPoint);
+        if (!bot.depsInstalled) {
+            await autoInstallDeps(bot.id, botDir, bot.entryPoint);
+            bot.depsInstalled = true;
+            saveBots();
+        }
     }
 
     // Load .env file if present in bot directory
@@ -991,6 +1011,8 @@ app.delete('/api/bots/:id', async (req, res) => {
         // Clean up logs
         botLogs.delete(bot.id);
 
+        broadcastBotDeleted(bot.id);
+
         res.json({ success: true, message: 'Bot deleted' });
     } catch (err) {
         console.error('[SENPAI] Delete error:', err);
@@ -1209,7 +1231,7 @@ app.use((err, _req, res, _next) => {
 
 // ─── HTTP + WebSocket Server ─────────────────────────────────────────────────
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
     let subscribedBotId = null;
