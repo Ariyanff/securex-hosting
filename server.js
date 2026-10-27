@@ -413,6 +413,7 @@ async function startBot(bot) {
 
     // Load .env file if present in bot directory
     let botEnv = { ...process.env, PYTHONUNBUFFERED: '1' };
+    delete botEnv.PORT; // Prevent child bot from conflicting with panel HTTP port
     const envFilePath = path.join(botDir, '.env');
     if (fs.existsSync(envFilePath)) {
         try {
